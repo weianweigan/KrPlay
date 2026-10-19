@@ -1,0 +1,29 @@
+[
+  {
+    "name": "wheelplay",
+    "url": "https://github.com/fython/wheelplay.git",
+    "commit": "4ed3536822998babd086e4fcb1a384e791b0e2d4",
+    "role": "Base for committed KrPlay derivative in krplay/",
+    "license": "GPL-3.0",
+    "localReferencePath": "upstream/wheelplay",
+    "snapshotCommitted": false
+  },
+  {
+    "name": "DiPlay",
+    "url": "https://github.com/shihabal3amri/DiPlay.git",
+    "commit": "b309eae90974921118d4d835413e7928b3a6193e",
+    "role": "Local protocol reference only",
+    "license": "GPL-3.0",
+    "localReferencePath": "upstream/DiPlay",
+    "snapshotCommitted": false
+  },
+  {
+    "name": "xcertplay",
+    "url": "https://github.com/shilapi/xcertplay.git",
+    "commit": "56f7bc261aa905146f9ac4dda7870da4cb4037ca",
+    "role": "Local protocol reference only",
+    "license": "GPL-3.0",
+    "localReferencePath": "upstream/xcertplay",
+    "snapshotCommitted": false
+  }
+]

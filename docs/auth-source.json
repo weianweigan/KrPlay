@@ -1,0 +1,7 @@
+{
+  "project": "DiPlay",
+  "version": "0.2.21",
+  "url": "https://github.com/shihabal3amri/DiPlay/releases/download/v0.2.21/DiPlay-0.2.21.apk",
+  "sha256": "916c0708beb1022d4ea9678ff6a46dfb6d234f707837a2cbd80d615e8e2bb2e3",
+  "assets": ["assets/offline-mfi/identity.pk8", "assets/offline-mfi/certificate.p7b"]
+}

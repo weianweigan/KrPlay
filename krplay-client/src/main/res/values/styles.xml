@@ -1,0 +1,12 @@
+<resources>
+    <style name="KrPlayTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:colorAccent">#B4D9B1</item>
+        <item name="android:windowBackground">#11161A</item>
+        <item name="android:colorBackground">#11161A</item>
+        <item name="android:textColorPrimary">#E2E8E3</item>
+        <item name="android:textColorSecondary">#C1C9BE</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:statusBarColor">#11161A</item>
+        <item name="android:navigationBarColor">#11161A</item>
+    </style>
+</resources>

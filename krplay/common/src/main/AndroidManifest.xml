@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <application>
+        <service android:name="com.zeekr.bridge.KrPlayConnectionService" android:exported="false" android:foregroundServiceType="connectedDevice" />
+        <service android:name="com.zeekr.bridge.BorrowVpnService" android:exported="false" android:permission="android.permission.BIND_VPN_SERVICE">
+            <intent-filter><action android:name="android.net.VpnService"/></intent-filter>
+            <meta-data android:name="android.net.VpnService.SUPPORTS_ALWAYS_ON" android:value="false"/>
+        </service>
+        <activity android:name="com.zeekr.bridge.BoxLauncherActivity" android:exported="true" android:resizeableActivity="true" android:theme="@android:style/Theme.Material.NoActionBar" />
+        <activity android:name="com.shilapi.xcertplay.DiPlayActivity" android:exported="true" android:launchMode="singleTop" android:configChanges="density|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode" android:theme="@style/Theme.Xcertplay">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+        </activity>
+        <service android:name="com.shilapi.xcertplay.DiPlaySessionService"
+            android:exported="false" android:foregroundServiceType="connectedDevice|microphone|mediaPlayback" />
+
+        <activity
+            android:name="com.shilapi.xcertplay.CarPlayHostActivity"
+            android:configChanges="density|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:resizeableActivity="true"
+            android:screenOrientation="fullSensor"
+            android:theme="@style/Theme.Xcertplay"
+            android:windowSoftInputMode="adjustResize">
+
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/usb_device_filter" />
+        </activity>
+
+        <activity
+            android:name="com.shilapi.xcertplay.MainActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Xcertplay" />
+
+        <activity
+            android:name="com.shilapi.xcertplay.ImageCropActivity"
+            android:exported="false"
+            android:screenOrientation="fullSensor"
+            android:theme="@style/Theme.Xcertplay" />
+
+        <receiver
+            android:name="com.shilapi.xcertplay.BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+</manifest>

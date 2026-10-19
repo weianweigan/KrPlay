@@ -1,0 +1,15 @@
+tunnel:
+  name: krplay0
+  mtu: 1500
+  ipv4: 198.18.0.1
+socks5:
+  address: 127.0.0.1
+  port: 1080
+  # UDP ASSOCIATE is not implemented by the v1 worker. Non-DNS UDP is rejected.
+  udp: udp
+misc:
+  task-stack-size: 81920
+  max-session-count: 64
+  connect-timeout: 5000
+  log-file: stderr
+  log-level: warn

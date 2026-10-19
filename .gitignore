@@ -1,0 +1,52 @@
+# Build products and machine-local state
+.DS_Store
+._*
+**/build/
+**/.gradle/
+**/.kotlin/
+**/.cxx/
+**/.externalNativeBuild/
+**/node_modules/
+**/local.properties
+**/.idea/
+*.iml
+*.log
+*.hprof
+__pycache__/
+*.pyc
+
+# Local signing, CarPlay provisioning and credentials
+**/.signing/
+**/.local/
+**/.private/
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.sample
+!**/.env.template
+*.jks
+*.keystore
+*.pk8
+*.p7b
+*.pem
+*.key
+*.p12
+*.pfx
+
+# APKs are distributed through Actions artifacts, not Git history
+*.apk
+*.aab
+*.apks
+*.idsig
+/dist/
+
+# Upstream snapshots must be ordinary source directories, never nested repositories
+**/.git/
+
+# Local upstream reference trees are not part of the project source or CI
+/upstream/
+
+Agent.md
+
+# Internal development and verification documents
+/docs_dev/
