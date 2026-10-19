@@ -99,33 +99,27 @@ manifest = dict(
     authenticationSource=auth_source, deviceTested=report is not None, deviceTestReport=report, apks=artifacts,
 )
 if release:
-    files = [entry for apk in artifacts for entry in (apk['file'], apk['file'] + '.sha256')]
-    files += [distribution['sourceFile'], distribution['sourceFile'] + '.sha256',
-              distribution['licensesFile'], distribution['licensesFile'] + '.sha256',
-              'DISTRIBUTION.md', 'artifacts.json', 'RELEASE-NOTES.md']
-    manifest['releaseFiles'] = files
+    manifest['releaseFiles'] = [apk['file'] for apk in artifacts]
+    apk_rows = []
+    for apk in artifacts:
+        target = "接收端（手机/盒子，Android 9+）" if apk['minSdk'] == 28 else "车机端（极氪车机/大屏，Android 10+）"
+        size_mb = f"{apk['bytes'] / (1024 * 1024):.2f} MB" if apk['bytes'] >= 1024 * 1024 else f"{apk['bytes'] / 1024:.1f} KB"
+        apk_rows.append(f"| `{apk['file']}` | {target} | {size_mb} | `{apk['sha256']}` |")
+    apk_table = "\n".join(apk_rows)
+
     notes = f"""# KrPlay {release['tag']}
 
-Install `KrPlay-{release['tag']}.apk` on the receiver (Android 9+) and
-`KrPlay-Client-{release['tag']}.apk` on the head unit (Android 10+).
+## 安装包列表与校验和
 
-- Source commit: {source_info['revision']}
-- Browse complete corresponding source: {source_info['sourceUrl']}
-- Download complete source/build scripts: [{distribution['sourceFile']}]({source_info['repository']}/releases/download/{release['tag']}/{distribution['sourceFile']})
-- Full copyright/license texts: `{distribution['licensesFile']}` and the in-app license viewer.
-- Verify the included SHA-256 files before installation.
-- Both APKs use development signing. Different hosted builds may use different keys;
-  continuous in-place upgrades require a persistent signing key.
-- Build/signature checks are automated; this release does not claim physical vehicle testing.
-"""
-    if auth_source:
-        notes += f"""
-The receiver APK includes two runtime authentication files extracted from the
-pinned [DiPlay {auth_source['version']}]({auth_source['url']}) APK
-(SHA-256 `{auth_source['sha256']}`). These are third-party authentication data,
-not newly issued credentials or project source code. The source and license ZIPs
-exclude credential bytes; distribution does not assert Apple certification or
-resolve the separate third-party asset permissions documented in THIRD_PARTY_NOTICES.md.
+| 文件名 | 适用设备 | 大小 | SHA-256 |
+| :--- | :--- | :--- | :--- |
+{apk_table}
+
+## 说明
+- **接收端 (`KrPlay-{release['tag']}.apk`)**：内置并验证匹配的 CarPlay 认证对，支持系统热点与有线连接。
+- **车机端 (`KrPlay-Client-{release['tag']}.apk`)**：极简无原生库，自动发现并连接接收端大屏投屏。
+- 源码可通过 GitHub 自动提供的 Source Code (zip/tar.gz) 随时获取。
+- 两个 APK 均使用开发签名，首次安装请在设备上按提示允许。
 """
     (destination / 'RELEASE-NOTES.md').write_text(notes)
 (destination / 'artifacts.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')

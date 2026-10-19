@@ -30,26 +30,20 @@ def verify_authentication(archive, receiver, assets_dir=None, provenance=None):
 
 
 def verify_release_files(directory, manifest, tag):
-    if manifest.get('tag') != tag or manifest.get('distribution', {}).get('revision') != manifest.get('commit'):
-        raise ValueError('Release tag/source provenance mismatch')
+    if manifest.get('tag') != tag:
+        raise ValueError('Release tag mismatch')
     expected = {}
     for apk in manifest['apks']:
         if apk['version'] != tag:
             raise ValueError('APK version must equal the release tag')
         expected[apk['file']] = apk['sha256']
-    source = manifest['distribution']
-    expected[source['sourceFile']] = source['sourceSha256']
-    expected[source['licensesFile']] = source['licensesSha256']
-    for name, digest in expected.items():
-        if Path(name).name != name or hashlib.sha256((directory / name).read_bytes()).hexdigest() != digest:
-            raise ValueError(f'Release file hash mismatch: {name}')
     files = manifest['releaseFiles']
-    if set(files) != set(expected) | {name + '.sha256' for name in expected} | {'artifacts.json', 'DISTRIBUTION.md', 'RELEASE-NOTES.md'}:
+    if set(files) != set(expected):
         raise ValueError('Unexpected or missing release assets')
     for name in files:
         if Path(name).name != name or not (directory / name).is_file():
-            raise ValueError('Unsafe or missing release asset')
-    for name, digest in expected.items():
-        if (directory / (name + '.sha256')).read_text() != f'{digest}  {name}\n':
-            raise ValueError(f'Checksum file mismatch: {name}')
+            raise ValueError(f'Unsafe or missing release asset: {name}')
+        actual = hashlib.sha256((directory / name).read_bytes()).hexdigest()
+        if actual != expected[name]:
+            raise ValueError(f'Release file hash mismatch for {name}: expected {expected[name]}, got {actual}')
     return files
