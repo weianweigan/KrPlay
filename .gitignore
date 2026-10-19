@@ -50,3 +50,7 @@ Agent.md
 
 # Internal development and verification documents
 /docs_dev/
+
+# Site dependencies and build artifacts
+site/node_modules/
+site/dist/

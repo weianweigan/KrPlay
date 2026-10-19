@@ -13,9 +13,9 @@ class ReverseSocks5Hub(private val workerPort:Int=com.krplay.protocol.Ports.REVE
     private var dns:DatagramSocket?=null
     @Synchronized fun start(){if(running)return
         try{
-            val remote=ServerSocket(workerPort).also{listeners.add(it)}
-            val local=ServerSocket(localPort,16,InetAddress.getByName("127.0.0.1")).also{listeners.add(it)}
-            dns=DatagramSocket(dnsPort,InetAddress.getByName("127.0.0.1"));running=true
+            val remote=ServerSocket().apply{reuseAddress=true;bind(InetSocketAddress(workerPort))}.also{listeners.add(it)}
+            val local=ServerSocket().apply{reuseAddress=true;bind(InetSocketAddress(InetAddress.getByName("127.0.0.1"),localPort),16)}.also{listeners.add(it)}
+            dns=DatagramSocket(null).apply{reuseAddress=true;bind(InetSocketAddress(InetAddress.getByName("127.0.0.1"),dnsPort))};running=true
             Thread({while(running){val s=try{remote.accept()}catch(_:Exception){break};if(!running){Wire.close(s);break};Wire.socket(s);sockets.add(s);if(!workers.offer(s)){sockets.remove(s);Wire.close(s)}}},"KrPlay-Workers").start()
             Thread({while(running){val s=try{local.accept()}catch(_:Exception){break};if(!running){Wire.close(s);break};if(sockets.size>=96){Wire.close(s);continue};sockets.add(s);Thread({bridge(s)},"KrPlay-SOCKS-Bridge").start()}},"KrPlay-SOCKS-Accept").start()
             Thread({dnsLoop()},"KrPlay-DNS").start()

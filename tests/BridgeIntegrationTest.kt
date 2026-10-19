@@ -41,6 +41,6 @@ fun main(){
     val staleDeadline=System.nanoTime()+2_000_000_000L
     while(hub.idleWorkers()>0&&System.nanoTime()<staleDeadline)Thread.sleep(10)
     check(hub.idleWorkers()==0){"Disconnected idle workers must not be reported as usable"}
-    hub.stop();hub.start();hub.stop()
+    hub.stop();Thread.sleep(50);hub.start();hub.stop()
     println("Bridge integration passed: CSD/IDR replay, 2MiB frame, source reset, restart and reverse half-close relay")
 }
