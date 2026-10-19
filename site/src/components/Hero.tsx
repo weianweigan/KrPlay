@@ -1,5 +1,5 @@
 import React from 'react';
-import { Download, Sparkles, ShieldCheck, Cpu, MonitorSmartphone, Wifi, Activity } from 'lucide-react';
+import { Download, Sparkles, ShieldCheck, Wifi, Activity } from 'lucide-react';
 import { Language, ReleaseInfo } from '../types';
 import { translations } from '../i18n/translations';
 

@@ -8,7 +8,7 @@ class LinkProbeServer(private val port:Int=Ports.PROBE):Closeable {
     @Volatile private var running=false
     private var server:ServerSocket?=null
     @Volatile private var peer:Socket?=null
-    fun start(){val listener=ServerSocket().apply{reuseAddress=true;bind(InetSocketAddress(port))};server=listener;running=true
+    fun start(){val listener=ServerSocket().apply{reuseAddress=true;bind(InetSocketAddress(this@LinkProbeServer.port))};server=listener;running=true
         Thread({val buffer=ByteArray(32768){(it*31).toByte()};while(running){val s=try{listener.accept()}catch(_:Exception){break};peer=s
             try{Wire.socket(s);s.soTimeout=5000;val input=DataInputStream(s.getInputStream());val out=DataOutputStream(s.getOutputStream())
                 var total=0

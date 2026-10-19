@@ -1,5 +1,5 @@
 import React from 'react';
-import { Smartphone, Car, ArrowRight, ShieldCheck, Info, CheckCircle2, Wifi, Zap } from 'lucide-react';
+import { Info, CheckCircle2, Zap } from 'lucide-react';
 import { Language } from '../types';
 import { translations } from '../i18n/translations';
 
