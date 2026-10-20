@@ -136,4 +136,5 @@
     <string name="settings_version_source">此版本對應原始碼</string>
     <string name="settings_license_texts">著作權與授權全文</string>
     <string name="settings_source_offer">可免費取得完整原始碼與建置指令。已發佈版本連結至對應提交；尚未提交的本機開發版本連結至專案儲存庫。</string>
+    <string name="settings_check_updates">檢查更新</string>
 </resources>

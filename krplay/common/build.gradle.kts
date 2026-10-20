@@ -26,6 +26,7 @@ android {
     }
 
     sourceSets.getByName("main").java.srcDir("../../android-common/src/main/java")
+    sourceSets.getByName("test").java.srcDir("../../android-common/src/test/java")
     testOptions { unitTests.isIncludeAndroidResources = true }
 
     buildFeatures {

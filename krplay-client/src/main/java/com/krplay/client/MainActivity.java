@@ -24,7 +24,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     private LinearLayout dock,carButton,appsButton;private ImageButton handle;private Dialog networkDialog;
     private int streamWidth=1920,streamHeight=1080;private boolean active,collapsed;private String host;
     private JSONObject remote=new JSONObject();
-    @Override public void onCreate(Bundle b){super.onCreate(b);getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    @Override public void onCreate(Bundle b){super.onCreate(b);com.krplay.update.AppUpdates.checkOnStart(this);getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         // OEM split-screen launchers may reapply immersive flags when a dialog returns
         // focus, promoting the task to fullscreen. Let the head unit own window bounds.
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
@@ -74,6 +74,7 @@ if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.conten
         networkText.setText(remote.optString("fixedEntryMessage","正在获取固定入口状态")+"\nTCP / DNS 借网 · UDP 暂不支持\n"+remote.optString("vpnMessage","等待设备状态")+"\n可用通道："+remote.optInt("idleWorkers")+String.format(Locale.US,"\nVPN 接收 %.2f MiB / 发送 %.2f MiB\n\n",remote.optLong("rxBytes")/1048576.0,remote.optLong("txBytes")/1048576.0)+detail);}
     private void settings(){LinearLayout form=new LinearLayout(this);form.setOrientation(LinearLayout.VERTICAL);form.setPadding(dp(20),0,dp(20),0);CheckBox automatic=new CheckBox(this);automatic.setText("自动连接（推荐）");automatic.setChecked(automaticConnection);form.addView(automatic);EditText input=new EditText(this);input.setSingleLine();input.setSelectAllOnFocus(true);input.setText(host);input.setHint("例如 192.168.43.1");input.setEnabled(!automaticConnection);form.addView(input);automatic.setOnCheckedChangeListener((b,on)->input.setEnabled(!on));
         TextView sourceOffer=text("开源与许可：免费获取完整源码与构建脚本",14,MUTED);form.addView(sourceOffer);
+        dialogButton(form,"检查更新 · "+com.krplay.update.AppUpdates.installedVersion(this),()->com.krplay.update.AppUpdates.open(this));
         dialogButton(form,"KrPlay 项目仓库",()->com.krplay.distribution.SourceDistribution.open(this,com.krplay.distribution.SourceDistribution.REPOSITORY));
         dialogButton(form,"客户端对应源码 · "+com.krplay.distribution.SourceDistribution.versionLabel(this),()->com.krplay.distribution.SourceDistribution.open(this,com.krplay.distribution.SourceDistribution.sourceUrl(this)));
         dialogButton(form,"接收端对应源码",()->com.krplay.distribution.SourceDistribution.open(this,com.krplay.distribution.SourceDistribution.receiverSourceUrl(remote)));

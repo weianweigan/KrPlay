@@ -136,4 +136,5 @@
     <string name="settings_version_source">此版本对应源码</string>
     <string name="settings_license_texts">版权与许可全文</string>
     <string name="settings_source_offer">可免费获取完整源码和构建脚本。已发布构建链接到对应提交；未提交的本地开发构建链接到项目仓库。</string>
+    <string name="settings_check_updates">检查更新</string>
 </resources>

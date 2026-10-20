@@ -15,6 +15,8 @@ internal fun HelpSettingsScreen(state: SettingsState, actions: SettingsActions) 
         SettingsButton(R.string.settings_wireless_help) { actions.command(SettingsCommand.WIRELESS_HELP) }
     }
     SettingsGroup(R.string.settings_about_diagnostics) {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        SettingsButton(R.string.settings_check_updates) { com.krplay.update.AppUpdates.open(context) }
         Text(
             "${settingsString(R.string.app_name)} · ${state.runtime.version}",
             style = MaterialTheme.typography.titleMedium,

@@ -11,6 +11,7 @@ android {
     }
     sourceSets.getByName("main").java.srcDir("../protocol/src/main/java")
     sourceSets.getByName("main").java.srcDir("../android-common/src/main/java")
+    sourceSets.getByName("test").java.srcDir("../android-common/src/test/java")
     testOptions { unitTests.isIncludeAndroidResources = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_1_8; targetCompatibility = JavaVersion.VERSION_1_8 }
 }

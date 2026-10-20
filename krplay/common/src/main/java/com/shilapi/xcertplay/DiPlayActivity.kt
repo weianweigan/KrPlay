@@ -75,6 +75,7 @@ class DiPlayActivity : AppCompatActivity() {
     private val oemImageCrop=registerForActivityResult(ActivityResultContracts.StartActivityForResult()){if(it.resultCode==RESULT_OK)render()}
     private val tick=object:Runnable{override fun run(){refreshStatus();refreshService();refreshSettingsRuntime();handler.postDelayed(this,1000)}}
     override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState)
+        com.krplay.update.AppUpdates.checkOnStart(this)
         ServerWindow.showSystemBars(window);refreshAuthentication()
         page=savedInstanceState?.getString("page")?:intent.getStringExtra("page")?:"service"
         createShell();startForegroundService(Intent(this,com.zeekr.bridge.KrPlayConnectionService::class.java))

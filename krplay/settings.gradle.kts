@@ -8,6 +8,7 @@ pluginManagement {
             }
         }
         mavenCentral()
+        maven { url = uri("https://repo1.maven.org/maven2/") }
         gradlePluginPortal()
     }
 }
@@ -22,6 +23,7 @@ dependencyResolutionManagement {
         if (localMaven.isDirectory) maven { url = uri(localMaven) }
         google { content { includeGroupByRegex("androidx\\..*"); includeGroupByRegex("com\\.android.*"); includeGroupByRegex("com\\.google.*") } }
         mavenCentral()
+        maven { url = uri("https://repo1.maven.org/maven2/") }
     }
 }
 

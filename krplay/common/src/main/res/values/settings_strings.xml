@@ -136,4 +136,5 @@
     <string name="settings_version_source">Source for this version</string>
     <string name="settings_license_texts">Copyright and license texts</string>
     <string name="settings_source_offer">Get the complete source and build scripts free of charge. Published builds link to their exact revision; local working-tree builds link to the project repository.</string>
+    <string name="settings_check_updates">Check for updates</string>
 </resources>

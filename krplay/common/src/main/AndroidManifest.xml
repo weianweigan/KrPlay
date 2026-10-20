@@ -9,7 +9,15 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <application>
+        <activity android:name="com.krplay.update.UpdateActivity" android:exported="false"
+            android:launchMode="singleTask" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
+            android:theme="@android:style/Theme.Material.NoActionBar" />
+        <provider android:name="com.krplay.update.UpdateApkProvider"
+            android:authorities="${applicationId}.updates" android:exported="false"
+            android:grantUriPermissions="true" />
+
         <service android:name="com.zeekr.bridge.KrPlayConnectionService" android:exported="false" android:foregroundServiceType="connectedDevice" />
         <service android:name="com.zeekr.bridge.BorrowVpnService" android:exported="false" android:permission="android.permission.BIND_VPN_SERVICE">
             <intent-filter><action android:name="android.net.VpnService"/></intent-filter>
