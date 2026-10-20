@@ -40,7 +40,9 @@ class RawTcpNaluServer(private val port: Int = 8081, private val requestIdr: () 
         val listener=ServerSocket().apply { reuseAddress=true; bind(InetSocketAddress(port)) }
         server=listener;running=true
         watchdog=Executors.newSingleThreadScheduledExecutor().also { executor ->
-            executor.scheduleAtFixedRate({client?.let { if(it.writingSince!=0L && System.nanoTime()-it.writingSince>120_000_000){slowDisconnects.incrementAndGet();it.writingSince=0;Wire.close(it.socket)} }},20,20,TimeUnit.MILLISECONDS)
+            // Large IDRs and brief Wi-Fi stalls can take more than 120ms. Queue recovery
+            // already bounds buffered video; only abandon a persistently blocked writer.
+            executor.scheduleAtFixedRate({client?.let { if(it.writingSince!=0L && System.nanoTime()-it.writingSince>2_000_000_000L){slowDisconnects.incrementAndGet();it.writingSince=0;Wire.close(it.socket)} }},100,100,TimeUnit.MILLISECONDS)
         }
         Thread({while(running) { val socket=try{listener.accept()}catch(_:Exception){break}
             try { Wire.socket(socket); val c=Client(socket)

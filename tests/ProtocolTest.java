@@ -17,6 +17,11 @@ public final class ProtocolTest {
         check(Arrays.equals(VideoPolicy.viewport(3200,2136,0),new int[]{3200,2136}),"native profile retained");
         check(VideoPolicy.renderTime(1000500,1000000,20_000_000)==20_000_000,"fabricated PTS is not zero decode latency");
         check(VideoPolicy.renderTime(1000000,15_000_000,20_000_000)==15_000_000,"valid hardware timestamp preserved");
+        VideoPolicy.KeyframeRequests requests=new VideoPolicy.KeyframeRequests();
+        check(requests.acquire(-2_000_000_000L),"first request accepts a negative monotonic clock origin");
+        check(!requests.acquire(-1_999_000_000L),"concurrent reconnect/decoder requests coalesced");
+        check(!requests.acquire(-1_000_000_001L),"keyframe request cooldown retained");
+        check(requests.acquire(-1_000_000_000L),"missing keyframe can be requested again after one second");
         PerformanceStats stats=new PerformanceStats();
         for(int i=0;i<5;i++)check(stats.probe(1_000_000_000L,6_002_000_000L,6_003_000_000L,1_005_000_000L),"valid asymmetric clocks");
         check(Math.abs(stats.offsetNs()-5_000_000_000L)<2,"independent device clocks aligned");check(stats.synced()&&stats.rttMs()==4,"server processing excluded from RTT");

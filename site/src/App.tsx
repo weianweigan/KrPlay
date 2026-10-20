@@ -10,6 +10,7 @@ import { WorkflowGuide } from './components/WorkflowGuide';
 import { DownloadSection } from './components/DownloadSection';
 import { ComplianceSection } from './components/ComplianceSection';
 import { Footer } from './components/Footer';
+import { CockpitDock } from './components/CockpitDock';
 
 export const AppContent: React.FC = () => {
   const [lang, setLang] = useState<Language>('zh');
@@ -58,7 +59,7 @@ export const AppContent: React.FC = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 dark:bg-slate-950 dark:text-slate-100 light:bg-slate-50 light:text-slate-900 transition-colors duration-200">
+    <div className="min-h-screen bg-[var(--surface-canvas)] text-[var(--text-primary)] transition-colors duration-300 relative pb-16 selection:bg-[#3B5BDB] selection:text-white">
       <Navbar lang={lang} setLang={setLang} />
       <main>
         <Hero lang={lang} release={release} />
@@ -69,6 +70,7 @@ export const AppContent: React.FC = () => {
         <ComplianceSection lang={lang} />
       </main>
       <Footer lang={lang} />
+      <CockpitDock />
     </div>
   );
 };

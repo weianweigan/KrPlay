@@ -24,7 +24,11 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     private LinearLayout dock,carButton,appsButton;private ImageButton handle;private Dialog networkDialog;
     private int streamWidth=1920,streamHeight=1080;private boolean active,collapsed;private String host;
     private JSONObject remote=new JSONObject();
-    @Override public void onCreate(Bundle b){super.onCreate(b);getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);getWindow().getDecorView().setSystemUiVisibility(5894);
+    @Override public void onCreate(Bundle b){super.onCreate(b);getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        // OEM split-screen launchers may reapply immersive flags when a dialog returns
+        // focus, promoting the task to fullscreen. Let the head unit own window bounds.
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
         if(!getPreferences(0).getBoolean("overlayOptionsV1",false))getPreferences(0).edit().putBoolean("overlayOptionsV1",true).putBoolean("showStatus",false).putBoolean("showPerformance",false).apply();
         videoProfile=getPreferences(0).getInt("videoProfile",1);automaticConnection=getPreferences(0).getBoolean("automaticConnection",true);host=automaticConnection?com.krplay.protocol.Discovery.FIXED_HOST:getPreferences(0).getString("host",com.krplay.protocol.Discovery.FIXED_HOST);collapsed=getPreferences(0).getBoolean("collapsed",false);
         FrameLayout root=new FrameLayout(this);root.setBackgroundColor(INK);stage=new FrameLayout(this);root.addView(stage,new FrameLayout.LayoutParams(-1,-1));
@@ -34,21 +38,21 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         performanceHud=text("",12,MINT);performanceHud.setPadding(dp(12),dp(8),dp(12),dp(8));performanceHud.setBackground(round(0xe61c2428,16,UiPalette.BORDER));FrameLayout.LayoutParams hud=new FrameLayout.LayoutParams(-2,-2,Gravity.BOTTOM|Gravity.START);hud.setMargins(dp(20),0,dp(118),dp(18));root.addView(performanceHud,hud);showPerformance=getPreferences(0).getBoolean("showPerformance",false);performanceHud.setVisibility(showPerformance?View.VISIBLE:View.GONE);
         dock=new LinearLayout(this);dock.setOrientation(LinearLayout.VERTICAL);dock.setPadding(dp(8),dp(10),dp(8),dp(10));dock.setBackground(round(0xf01c2428,24,UiPalette.BORDER));dock.setElevation(dp(12));
         carButton=button(dock,"car","CarPlay",()->{control.mode(0);select(0);});
-        appsButton=button(dock,"apps","设备画面",()->{if(!remote.optBoolean("rootScreen")){Toast.makeText(this,"设备画面与远程触控需要 root；CarPlay 和 VPN 无需 root",Toast.LENGTH_LONG).show();return;}control.mode(1);select(1);});
+        appsButton=button(dock,"apps","设备画面",()->{if(!remote.optBoolean("rootScreen")){Toast.makeText(this,"设备画面与远程触控需要 root；CarPlay 和 VPN 无需 root",Toast.LENGTH_LONG).show();return;}control.mode(1);select(1);});appsButton.setVisibility(View.GONE);
         button(dock,"voice","Siri",()->control.key(KeyEvent.KEYCODE_ASSIST));button(dock,"back","返回",()->control.key(KeyEvent.KEYCODE_BACK));button(dock,"home","主页",()->control.key(KeyEvent.KEYCODE_HOME));
         button(dock,"performance","性能",this::showPerformance);button(dock,"network","网络",this::showNetwork);button(dock,"settings","连接设置",this::settings);button(dock,"hide","收起",()->collapse(true));
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);scroll.setVerticalScrollBarEnabled(false);scroll.addView(dock);
         FrameLayout.LayoutParams rail=new FrameLayout.LayoutParams(dp(92),Math.min(dp(570),getResources().getDisplayMetrics().heightPixels-dp(36)),Gravity.RIGHT|Gravity.CENTER_VERTICAL);rail.setMargins(0,dp(18),dp(18),dp(18));root.addView(scroll,rail);
         handle=new ImageButton(this);handle.setImageDrawable(new DockIcon("show",MINT));handle.setContentDescription("展开控制侧栏");handle.setPadding(dp(10),dp(14),dp(10),dp(14));handle.setBackground(round(0xee1c2428,16,UiPalette.BORDER));handle.setOnClickListener(v->collapse(false));
         FrameLayout.LayoutParams tab=new FrameLayout.LayoutParams(dp(44),dp(64),Gravity.RIGHT|Gravity.CENTER_VERTICAL);tab.rightMargin=dp(8);root.addView(handle,tab);
-        setContentView(root);collapse(collapsed);select(0);
+        ClientWindowInsets.fit(root);setContentView(root);collapse(collapsed);select(0);
         lanChanges=new android.net.ConnectivityManager.NetworkCallback(){
             @Override public void onAvailable(android.net.Network n){if(active&&LocalTransport.network==null){ticker.removeCallbacks(reconnectNetwork);ticker.postDelayed(reconnectNetwork,500);}}
             @Override public void onLost(android.net.Network n){if(java.util.Objects.equals(LocalTransport.network,n)){LocalTransport.network=null;ticker.removeCallbacks(reconnectNetwork);ticker.postDelayed(reconnectNetwork,500);}}
         };
         try{((android.net.ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE)).registerNetworkCallback(new android.net.NetworkRequest.Builder().addTransportType(android.net.NetworkCapabilities.TRANSPORT_WIFI).addTransportType(android.net.NetworkCapabilities.TRANSPORT_ETHERNET).build(),lanChanges);}catch(RuntimeException ignored){}
 if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO},41);
-        video.setOnTouchListener((v,e)->control!=null&&control.touch(e,v.getWidth(),v.getHeight()));stage.addOnLayoutChangeListener((v,l,t,r,bt,ol,ot,or,ob)->fit());
+        video.setOnTouchListener((v,e)->control!=null&&control.touch(e,v.getWidth(),v.getHeight()));stage.addOnLayoutChangeListener((v,l,t,r,bt,ol,ot,or,ob)->{fit();if(active)sendViewport();});
     }
     private LinearLayout button(LinearLayout parent,String icon,String label,Runnable action){LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.VERTICAL);row.setGravity(Gravity.CENTER);row.setPadding(0,dp(7),0,dp(7));row.setContentDescription(label);row.setFocusable(true);row.setClickable(true);
         ImageView image=new ImageView(this);image.setImageDrawable(new DockIcon(icon,UiPalette.TEXT));row.addView(image,new LinearLayout.LayoutParams(dp(24),dp(24)));TextView caption=text(label,11,UiPalette.TEXT);caption.setGravity(Gravity.CENTER);caption.setPadding(0,dp(4),0,0);row.addView(caption);
@@ -104,7 +108,7 @@ if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.conten
     }
     @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results){super.onRequestPermissionsResult(code,permissions,results);if(code==41&&active){if(audio!=null)audio.close();audio=new ClientAudio(this,host);audio.start();}}
     private String profileLabel(){return videoProfile==0?"原生":videoProfile==2?"720p":"1080p";}
-    private void sendViewport(){if(control==null)return;int w=stage.getWidth(),h=stage.getHeight();if(w<320||h<240){w=getResources().getDisplayMetrics().widthPixels;h=getResources().getDisplayMetrics().heightPixels;}if(w<320||h<240)return;int[] size=com.krplay.protocol.VideoPolicy.viewport(w,h,videoProfile);control.size(size[0],size[1]);}
+    private void sendViewport(){if(control==null)return;int w=stage.getWidth(),h=stage.getHeight();if(w<320||h<240)return;int[] size=com.krplay.protocol.VideoPolicy.viewport(w,h,videoProfile);control.size(size[0],size[1]);}
     private void fit(){int w=stage.getWidth(),h=stage.getHeight();if(w==0||h==0)return;double ratio=Math.min((double)w/streamWidth,(double)h/streamHeight);FrameLayout.LayoutParams p=new FrameLayout.LayoutParams((int)(streamWidth*ratio),(int)(streamHeight*ratio),Gravity.CENTER);video.setLayoutParams(p);}
     private void startConnections(){startConnections(true);}
     private void startConnections(boolean search){if(search)LocalTransport.network=LocalTransport.preferred(this);final int attempt=++connectionGeneration;try{android.net.wifi.WifiManager wifi=(android.net.wifi.WifiManager)getApplicationContext().getSystemService(WIFI_SERVICE);wifiLock=wifi.createWifiLock(android.net.wifi.WifiManager.WIFI_MODE_FULL_LOW_LATENCY,"KrPlay-Client");wifiLock.setReferenceCounted(false);wifiLock.acquire();}catch(RuntimeException ignored){}clock.reset();remote=new JSONObject();waiting.setText("KrPlay-Client\n\n"+(automaticConnection?"正在自动查找 KrPlay\n固定入口、网关与已知地址\n若失败，请确认热点与固定入口 VPN 已开启；也可手动指定地址":"正在连接安卓设备\n"+host));status("正在连接 · "+host);waiting.setVisibility(View.VISIBLE);control=new TouchControlClient(host,this::status,this::remote);player=new NaluStreamPlayer(host,()->{if(control!=null)control.idr();},this::status,(w,h)->runOnUiThread(()->{streamWidth=w;streamHeight=h;fit();}),clock);audio=new ClientAudio(this,host);diagnostics=new LinkDiagnostics();socks=new ReverseSocks5Worker(this,host,this::status);sendViewport();control.start();if(video.getHolder().getSurface().isValid())player.surface(video.getHolder().getSurface());player.start();socks.start();audio.start();lastTick=System.nanoTime();lastFrames=0;lastBytes=0;ticker.removeCallbacks(tick);ticker.post(tick);

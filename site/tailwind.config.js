@@ -8,6 +8,16 @@ export default {
   theme: {
     extend: {
       colors: {
+        zeekr: {
+          blue: '#3B5BDB',
+          'blue-hover': '#4C6EF5',
+          orange: '#F76707',
+          'orange-tag': '#D94826',
+          red: '#E03131',
+          green: '#2B8A3E',
+          dark: '#141517',
+          card: 'var(--surface-glass-primary)',
+        },
         receiver: {
           50: '#ecfdf5',
           100: '#d1fae5',
@@ -23,14 +33,32 @@ export default {
           600: '#0369a1',
         },
       },
+      borderRadius: {
+        'zeekr-modal': '24px',
+        'zeekr-card': '20px',
+        'zeekr-btn': '14px',
+        'zeekr-app': '14px',
+      },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+        sans: [
+          '"HarmonyOS Sans SC"',
+          '"MiSans"',
+          '"PingFang SC"',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          '"Inter"',
+          '"DIN Pro"',
+          'sans-serif',
+        ],
       },
       boxShadow: {
-        'glow-receiver': '0 0 35px -5px rgba(16, 185, 129, 0.3)',
-        'glow-client': '0 0 35px -5px rgba(2, 132, 199, 0.3)',
+        'zeekr-soft': 'var(--card-shadow-soft)',
+        'zeekr-elevated': 'var(--card-shadow-elevated)',
+        'glow-receiver': '0 0 35px -5px rgba(43, 138, 62, 0.3)',
+        'glow-client': '0 0 35px -5px rgba(59, 91, 219, 0.3)',
       }
     },
   },
   plugins: [],
 }
+

@@ -97,6 +97,7 @@ class BorrowVpnService:VpnService() {
     private fun update(text:String){if(message==text)return;message=text;getSystemService(NotificationManager::class.java).notify(725,notification(text));ZeekrBridgeManager.publishStatus()}
     private fun fail(reason:String){message=reason;active=false;accessActive=false;accessMessage=reason;ZeekrBridgeManager.publishStatus();stopSelf()}
     override fun onRevoke(){message="VPN 已让位或授权已撤销";accessMessage=message;stopSelf()}
+    override fun onTaskRemoved(rootIntent: Intent?){super.onTaskRemoved(rootIntent);stopSelf()}
     override fun onDestroy(){closing=true;handler.removeCallbacks(monitor)
         runCatching{TProxyService.TProxyStopService()};runCatching{tun?.close()};tun=null;anchor.close();active=false;accessActive=false;if(accessMessage.startsWith("固定入口已就绪"))accessMessage="固定入口 VPN 未开启"
         if(message.startsWith("VPN 已建立"))message="VPN 已断开"

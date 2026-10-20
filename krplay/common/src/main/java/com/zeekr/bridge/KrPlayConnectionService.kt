@@ -13,5 +13,6 @@ class KrPlayConnectionService:Service(){
     }
     override fun onStartCommand(intent:Intent?,flags:Int,startId:Int)=START_NOT_STICKY
     override fun onBind(intent:Intent?):IBinder?=null
+    override fun onTaskRemoved(rootIntent: Intent?){super.onTaskRemoved(rootIntent);stopSelf()}
     override fun onDestroy(){stopService(Intent(this,BorrowVpnService::class.java));TunnelDiagnostics.cancel();ZeekrBridgeManager.stop();super.onDestroy()}
 }

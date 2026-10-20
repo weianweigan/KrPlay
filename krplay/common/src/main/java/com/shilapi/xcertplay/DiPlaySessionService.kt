@@ -229,6 +229,12 @@ class DiPlaySessionService : Service() {
         } else startForeground(NOTIFICATION_ID, notification)
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        CarPlayBackgroundSession.stop()
+        stopSelf()
+    }
+
     override fun onDestroy() {
         destroyed = true
         sessionSubscription?.close()

@@ -3013,6 +3013,11 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private fun scheduleDisplaySize(width: Int, height: Int) {
         if (width <= 0 || height <= 0 || shuttingDown.get()) return
+        // Local TextureView layout changes must not compete with the connected client's
+        // viewport: each change restarts the complete CarPlay session.
+        if (AirPlayPersistence.loadAdaptiveClientSize(this) &&
+            com.zeekr.bridge.ZeekrBridgeManager.clientConnected()
+        ) return
         val size = DisplaySize(width, height)
         if (size == activeDisplaySize || size == pendingDisplaySize) return
         pendingDisplaySize = size
@@ -3029,7 +3034,13 @@ class CarPlayHostActivity : ComponentActivity() {
             fun even(value: Double) = (value.toInt().coerceAtLeast(2) / 2) * 2
             DisplaySize(even(width * scale), even(height * scale))
         }
-        if (size == activeDisplaySize || size == pendingDisplaySize) return
+        if (size == activeDisplaySize) {
+            // A native layout callback may already have queued a conflicting restart.
+            pendingDisplaySize = null
+            mainHandler.removeCallbacks(applyDisplaySize)
+            return
+        }
+        if (size == pendingDisplaySize) return
         activeDisplaySize?.let { active ->
             if (kotlin.math.abs(size.width - active.width) <= 8 &&
                 kotlin.math.abs(size.height - active.height) <= 8 &&
@@ -3224,7 +3235,7 @@ class CarPlayHostActivity : ComponentActivity() {
             val clean = oldController?.awaitClosed(CONTROLLER_CLOSE_TIMEOUT_MILLIS) ?: true
             oldSink?.close()
             if (terminateProcess) {
-                applicationContext.stopService(Intent(applicationContext, CarPlayVpnService::class.java))
+                KrPlayAppExit.cleanServices(applicationContext)
             }
             Log.i(TAG, "shutdown complete clean=$clean")
             applicationContext.stopService(Intent(applicationContext, DiPlaySessionService::class.java))

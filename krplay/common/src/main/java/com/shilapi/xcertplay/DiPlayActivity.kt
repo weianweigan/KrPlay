@@ -149,7 +149,22 @@ class DiPlayActivity : AppCompatActivity() {
             body.addView(button("下载测速 · 最多 8 MiB",false){MaterialAlertDialogBuilder(this).setTitle("使用车载流量测速").setMessage("通过车载网络下载最多 8 MiB，仅检测当前通道下载速度。").setNegativeButton("取消",null).setPositiveButton("开始"){_,_->com.zeekr.bridge.TunnelDiagnostics.start(true)}.show()},matchButton(12))
             body.addView(label("CarPlay 和借网 VPN 无需 root。借网支持 TCP / DNS，UDP 暂未支持；设备画面和触控需 root。",14,MUTED))
         }
+        ui.card(content,"中止服务",R.drawable.ic_media_stop){body->
+            body.addView(label("断开 iPhone 与车机连接，停止固定入口与借网 VPN，停止所有后台服务，清理相关内容并退出应用。",15,MUTED))
+            val exitButton=button("中止服务并退出",false,R.drawable.ic_media_stop){promptStopServicesAndExit()}
+            exitButton.setTextColor(android.graphics.Color.parseColor("#F2B8B5"))
+            exitButton.strokeColor=android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#B3261E"))
+            body.addView(exitButton,matchButton(12))
+        }
         setupError?.let{content.addView(label(it,16,WARNING))}
+    }
+    private fun promptStopServicesAndExit(){
+        MaterialAlertDialogBuilder(this)
+            .setTitle("中止服务")
+            .setMessage("确定要断开 iPhone 连接、停止所有 VPN 及后台服务，并完整退出应用吗？")
+            .setPositiveButton("中止并退出"){_,_->KrPlayAppExit.stopAndExit(this)}
+            .setNegativeButton("取消",null)
+            .show()
     }
     private fun refreshService(){
         val list=com.shilapi.xcertplay.connection.DeviceAddresses.discover(this)
@@ -177,7 +192,12 @@ class DiPlayActivity : AppCompatActivity() {
     private fun startVpn(borrow:Boolean=true){startForegroundService(Intent(this,com.zeekr.bridge.BorrowVpnService::class.java).apply{if(!borrow)action="access"})}
     private fun home(content:LinearLayout){
         content.addView(label("连接 iPhone",28,TEXT,true));content.addView(label("蓝牙完成无线握手，iPhone 随后连接本设备的热点接收 CarPlay。Wi-Fi 上网与热点可并发的设备不需要先断开 Wi-Fi。",16,MUTED));content.addView(space(24))
-        ui.card(content,"连接状态",R.drawable.ic_server_phone){body->status=label("",20,ACCENT,true);body.addView(status);details=label("",15,WARNING).apply{setTextIsSelectable(true)};body.addView(details);body.addView(button("查看连接详情",false){MaterialAlertDialogBuilder(this).setTitle("连接诊断").setMessage(ConnectionDiagnostics.report()).setPositiveButton("关闭",null).show()},matchButton(12))}
+        ui.card(content,"连接状态",R.drawable.ic_server_phone){body->status=label("",20,ACCENT,true);body.addView(status);details=label("",15,WARNING).apply{setTextIsSelectable(true)};body.addView(details);body.addView(button("查看连接详情",false){MaterialAlertDialogBuilder(this).setTitle("连接诊断").setMessage(ConnectionDiagnostics.report()).setPositiveButton("关闭",null).show()},matchButton(12))
+            val exitButton=button("中止服务并退出",false,R.drawable.ic_media_stop){promptStopServicesAndExit()}
+            exitButton.setTextColor(android.graphics.Color.parseColor("#F2B8B5"))
+            exitButton.strokeColor=android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#B3261E"))
+            body.addView(exitButton,matchButton(12))
+        }
         ui.card(content,"无线连接",R.drawable.ic_server_wifi){body->
             body.addView(ui.preference("iPhone",selectedPhoneName()){choosePhone()},matchButton())
             connectButton=button("连接 iPhone",true,R.drawable.ic_server_phone){connect(true)};body.addView(connectButton,matchButton(12))

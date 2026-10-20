@@ -102,24 +102,24 @@ if release:
     manifest['releaseFiles'] = [apk['file'] for apk in artifacts]
     apk_rows = []
     for apk in artifacts:
-        target = "接收端（手机/盒子，Android 9+）" if apk['minSdk'] == 28 else "车机端（极氪车机/大屏，Android 10+）"
+        target = "Receiver (Phone / TV Box, Android 9+)" if apk['minSdk'] == 28 else "Head Unit (Car screen / Tablet, Android 10+)"
         size_mb = f"{apk['bytes'] / (1024 * 1024):.2f} MB" if apk['bytes'] >= 1024 * 1024 else f"{apk['bytes'] / 1024:.1f} KB"
         apk_rows.append(f"| `{apk['file']}` | {target} | {size_mb} | `{apk['sha256']}` |")
     apk_table = "\n".join(apk_rows)
 
     notes = f"""# KrPlay {release['tag']}
 
-## 安装包列表与校验和
+## Downloads & Checksums
 
-| 文件名 | 适用设备 | 大小 | SHA-256 |
+| Package | Target | Size | SHA-256 |
 | :--- | :--- | :--- | :--- |
 {apk_table}
 
-## 说明
-- **接收端 (`KrPlay-{release['tag']}.apk`)**：内置并验证匹配的 CarPlay 认证对，支持系统热点与有线连接。
-- **车机端 (`KrPlay-Client-{release['tag']}.apk`)**：极简无原生库，自动发现并连接接收端大屏投屏。
-- 源码可通过 GitHub 自动提供的 Source Code (zip/tar.gz) 随时获取。
-- 两个 APK 均使用开发签名，首次安装请在设备上按提示允许。
+## Notes
+- **Receiver (`KrPlay-{release['tag']}.apk`)**: Includes and verifies matching runtime CarPlay authentication assets; supports system hotspot and USB wired connections.
+- **Head Unit (`KrPlay-Client-{release['tag']}.apk`)**: Ultra-lightweight with zero native library dependencies; automatically discovers and streams CarPlay display to the car screen.
+- Source code is available via GitHub's automatic Source Code (zip / tar.gz) archives.
+- Both APKs use development signing. Please allow installation prompts when prompted on your device.
 """
     (destination / 'RELEASE-NOTES.md').write_text(notes)
 (destination / 'artifacts.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')

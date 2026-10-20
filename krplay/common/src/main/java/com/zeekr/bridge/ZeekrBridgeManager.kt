@@ -34,6 +34,7 @@ object ZeekrBridgeManager {
     private val statusPending=java.util.concurrent.atomic.AtomicBoolean()
     private var width=1920;private var height=1080;private var fps=60
     private val recovery=ConcurrentHashMap<Int,()->Unit>()
+    private val keyframeRequests=com.krplay.protocol.VideoPolicy.KeyframeRequests()
     @Volatile private var carConfig:ByteArray?=null
     @Volatile private var carHevc=false
     @Volatile private var carWidth=1280
@@ -99,7 +100,10 @@ object ZeekrBridgeManager {
         for(i in contacts.indices)if(t.action==3 || t.action==1&&contacts[i]?.id==changed)contacts[i]=null
     }
     private fun cancelTouch(){CarPlayBackgroundSession.snapshot()?.controller?.sendTouch(emptyList());contacts.fill(null);if(mode==1)box?.touch(Wire.Touch(3,intArrayOf(0),floatArrayOf(0f),floatArrayOf(0f)))}
-    fun requestIdr(){if(mode==1)box?.requestKeyFrame()else recovery[carType]?.let{runCatching{it()}}}
+    fun requestIdr(){
+        if(mode==1){if(keyframeRequests.acquire(System.nanoTime()))box?.requestKeyFrame()}
+        else recovery[carType]?.let{if(keyframeRequests.acquire(System.nanoTime()))runCatching{it()}}
+    }
 
     /** Combine the existing upstream consumer without modifying shared/ or decrypt callbacks. */
     private val generations=java.util.concurrent.atomic.AtomicLong()

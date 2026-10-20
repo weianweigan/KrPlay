@@ -2,6 +2,15 @@ package com.krplay.protocol;
 /** Pure policy shared by the client and offline regression tests. */
 public final class VideoPolicy {
     private VideoPolicy() {}
+    /** Coalesce reconnect, decoder and bridge requests onto one upstream request per second. */
+    public static final class KeyframeRequests {
+        private boolean requested;
+        private long lastNs;
+        public synchronized boolean acquire(long nowNs) {
+            if(requested && nowNs-lastNs<1_000_000_000L)return false;
+            requested=true;lastNs=nowNs;return true;
+        }
+    }
     public static int[] viewport(int w,int h,int profile){
         if(w<320||h<240||profile<0||profile>2)throw new IllegalArgumentException("Invalid viewport/profile");
         int maxW=profile==0?4096:profile==2?1280:1920,maxH=profile==0?4096:profile==2?720:1080;

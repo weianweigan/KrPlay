@@ -24,7 +24,7 @@ final class TouchControlClient implements AutoCloseable {
     void test(boolean speed){send(new byte[]{7,(byte)(speed?1:0)});}
     void vpn(boolean enabled){send(new byte[]{8,(byte)(enabled?1:0)});}
     void idr(){send(new byte[]{4,0});}
-    void size(int w,int h){width=w;height=h;send(surface());}
+    void size(int w,int h){if(width==w&&height==h)return;width=w;height=h;send(surface());}
     private byte[] surface(){return packet(o->{o.writeByte(5);o.writeShort(width);o.writeShort(height);o.writeByte(60);});}
     void key(int code){send(packet(o->{o.writeByte(3);o.writeByte(0);o.writeInt(code);o.writeByte(3);o.writeByte(1);o.writeInt(code);}));}
     boolean touch(MotionEvent e,int w,int h){

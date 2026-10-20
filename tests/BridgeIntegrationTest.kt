@@ -22,6 +22,22 @@ fun main(){
         stream.resetSource(1280,720);check(input.read()==-1)
     }
     check(idrs.get()>0);stream.stop();stream.start();stream.stop()
+    // A brief Wi-Fi/receiver pause during a large IDR must not trigger a reconnect.
+    val paused=RawTcpNaluServer(19085);paused.start()
+    try {
+        Socket().use { s ->
+            s.receiveBufferSize=64*1024;s.connect(InetSocketAddress("127.0.0.1",19085));s.soTimeout=3000
+            val input=DataInputStream(s.getInputStream());check(packet(input).first.type==4)
+            paused.pushVideoNalu(false,0,config,0,config.size);check(packet(input).first.type==2)
+            val large=ByteArray(Wire.MAX_FRAME);large[2]=1;large[3]=0x65
+            paused.pushVideoNalu(false,20,large,0,large.size)
+            Thread.sleep(300)
+            check(paused.slowDisconnects.get()==0L){"A 300ms receiver pause must preserve the video connection"}
+            check(packet(input).first.type==2)
+            val resumed=packet(input);check(resumed.first.pts==20L&&resumed.second.size==Wire.MAX_FRAME)
+            check(paused.slowDisconnects.get()==0L)
+        }
+    } finally {paused.stop()}
     val probe=com.zeekr.bridge.LinkProbeServer(19084);probe.start()
     Socket("127.0.0.1",19084).use{s->s.soTimeout=2000;val out=DataOutputStream(s.getOutputStream());val input=DataInputStream(s.getInputStream())
         out.writeByte(4);out.flush();check(com.krplay.protocol.Discovery.verify(input))
@@ -42,5 +58,5 @@ fun main(){
     while(hub.idleWorkers()>0&&System.nanoTime()<staleDeadline)Thread.sleep(10)
     check(hub.idleWorkers()==0){"Disconnected idle workers must not be reported as usable"}
     hub.stop();Thread.sleep(50);hub.start();hub.stop()
-    println("Bridge integration passed: CSD/IDR replay, 2MiB frame, source reset, restart and reverse half-close relay")
+    println("Bridge integration passed: CSD/IDR replay, 2MiB frame, brief receiver stall, source reset, restart and reverse half-close relay")
 }
