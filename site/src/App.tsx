@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Language, ReleaseInfo } from './types';
-import { fetchLatestRelease } from './services/releaseService';
+import { fetchLatestRelease, FALLBACK_RELEASE } from './services/releaseService';
 import { ThemeProvider } from './context/ThemeContext';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
@@ -14,37 +14,7 @@ import { CockpitDock } from './components/CockpitDock';
 
 export const AppContent: React.FC = () => {
   const [lang, setLang] = useState<Language>('zh');
-  const [release, setRelease] = useState<ReleaseInfo>({
-    tag: 'v0.4.2',
-    name: 'KrPlay v0.4.2',
-    publishedAt: '2026-10-19',
-    htmlUrl: 'https://github.com/weianweigan/KrPlay/releases',
-    body: '',
-    assets: {
-      receiverApk: {
-        name: 'KrPlay-debug.apk',
-        size: 16800000,
-        downloadUrl: 'https://github.com/weianweigan/KrPlay/releases/latest/download/KrPlay-debug.apk',
-      },
-      clientApk: {
-        name: 'KrPlay-Client-debug.apk',
-        size: 12400000,
-        downloadUrl: 'https://github.com/weianweigan/KrPlay/releases/latest/download/KrPlay-Client-debug.apk',
-      },
-      sourceZip: {
-        name: 'KrPlay-source.zip',
-        size: 4500000,
-        downloadUrl: 'https://github.com/weianweigan/KrPlay/releases/latest/download/KrPlay-source.zip',
-      },
-      licensesZip: {
-        name: 'KrPlay-licenses.zip',
-        size: 210000,
-        downloadUrl: 'https://github.com/weianweigan/KrPlay/releases/latest/download/KrPlay-licenses.zip',
-      },
-      all: [],
-    },
-    isLive: false,
-  });
+  const [release, setRelease] = useState<ReleaseInfo>(FALLBACK_RELEASE);
 
   useEffect(() => {
     let mounted = true;

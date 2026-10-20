@@ -22,8 +22,8 @@ android {
         applicationId = "com.krplay.server"
         minSdk = 28
         targetSdk = 32
-        versionCode = providers.environmentVariable("KRPLAY_VERSION_CODE").orNull?.toInt() ?: 27
-        versionName = providers.environmentVariable("KRPLAY_RELEASE_TAG").orNull ?: "0.4.1"
+        versionCode = providers.environmentVariable("KRPLAY_VERSION_CODE").orNull?.toInt() ?: 4005
+        versionName = providers.environmentVariable("KRPLAY_RELEASE_TAG").orNull ?: "0.4.4"
 
     }
 
@@ -39,6 +39,17 @@ android {
             storePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").getOrElse("")
             keyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").getOrElse("")
             keyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").getOrElse("")
+        }
+    }
+
+    // Public APK updates must reuse the same externally provisioned signing identity.
+    providers.environmentVariable("KRPLAY_UPDATE_KEYSTORE_PATH").orNull?.let { path ->
+        signingConfigs.getByName("debug") {
+            storeFile = file(path)
+            check(storeFile!!.isFile) { "APK update signing keystore does not exist" }
+            storePassword = providers.environmentVariable("KRPLAY_UPDATE_KEYSTORE_PASSWORD").get()
+            keyAlias = providers.environmentVariable("KRPLAY_UPDATE_KEY_ALIAS").get()
+            keyPassword = providers.environmentVariable("KRPLAY_UPDATE_KEY_PASSWORD").get()
         }
     }
 

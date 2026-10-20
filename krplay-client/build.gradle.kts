@@ -2,11 +2,22 @@ plugins { id("com.android.application") version "9.1.0" }
 android {
     namespace = "com.krplay.client"
     compileSdk = 35
-    defaultConfig { applicationId = "com.krplay.client"; minSdk = 29; targetSdk = 32; versionCode = providers.environmentVariable("KRPLAY_VERSION_CODE").orNull?.toInt() ?: 5; versionName = providers.environmentVariable("KRPLAY_RELEASE_TAG").orNull ?: "0.4.1" }
+    defaultConfig { applicationId = "com.krplay.client"; minSdk = 29; targetSdk = 32; versionCode = providers.environmentVariable("KRPLAY_VERSION_CODE").orNull?.toInt() ?: 4005; versionName = providers.environmentVariable("KRPLAY_RELEASE_TAG").orNull ?: "0.4.4" }
     val localKey = file(".signing/krplay.p12")
     if (localKey.exists()) {
         signingConfigs.getByName("debug") {
             storeFile = localKey; storePassword = "android"; keyAlias = "krplay"; keyPassword = "android"
+        }
+    }
+
+    // Public APK updates must reuse the same externally provisioned signing identity.
+    providers.environmentVariable("KRPLAY_UPDATE_KEYSTORE_PATH").orNull?.let { path ->
+        signingConfigs.getByName("debug") {
+            storeFile = file(path)
+            check(storeFile!!.isFile) { "APK update signing keystore does not exist" }
+            storePassword = providers.environmentVariable("KRPLAY_UPDATE_KEYSTORE_PASSWORD").get()
+            keyAlias = providers.environmentVariable("KRPLAY_UPDATE_KEY_ALIAS").get()
+            keyPassword = providers.environmentVariable("KRPLAY_UPDATE_KEY_PASSWORD").get()
         }
     }
     sourceSets.getByName("main").java.srcDir("../protocol/src/main/java")

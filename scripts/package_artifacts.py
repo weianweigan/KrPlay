@@ -8,6 +8,7 @@ import re
 import subprocess
 import shutil
 from release_tag import check_tag
+from update_signing import verify_apk_certificate
 from release_support import verify_authentication
 import zipfile
 from distribution import build_info, create_bundle
@@ -28,6 +29,9 @@ if a.allow_local_auth and os.environ.get("GITHUB_ACTIONS"):
 if a.release_auth and (a.allow_local_auth or not a.release_tag):
     p.error('--release-auth requires a release tag and cannot be combined with --allow-local-auth')
 release = check_tag(root, a.release_tag) if a.release_tag else None
+signing_certificate = os.environ.get('KRPLAY_UPDATE_CERTIFICATE_SHA256', '')
+if release and not re.fullmatch(r'[0-9a-fA-F]{64}', signing_certificate):
+    p.error('Tag releases require KRPLAY_UPDATE_CERTIFICATE_SHA256 from persistent signing setup')
 if a.release_tag and a.allow_local_auth:
     p.error('Tag releases must include their corresponding public source bundle')
 destination = root / 'dist/release' if release else root / 'dist'
@@ -57,7 +61,10 @@ for name, package, minimum in [
     ('KrPlay-debug.apk', 'com.krplay.server.debug', 28),
 ]:
     apk = root / 'dist' / name
-    subprocess.run([str(a.jdk / 'bin/java'), '-jar', str(tools / 'lib/apksigner.jar'), 'verify', str(apk)], check=True)
+    signature = subprocess.check_output([str(a.jdk / 'bin/java'), '-jar', str(tools / 'lib/apksigner.jar'),
+                                         'verify', '--print-certs', str(apk)], text=True)
+    if signing_certificate:
+        verify_apk_certificate(signature, signing_certificate)
     subprocess.run([str(tools / 'zipalign'), '-c', '4', str(apk)], check=True)
     metadata = subprocess.check_output([str(tools / 'aapt2'), 'dump', 'badging', str(apk)], text=True)
     assert f"package: name='{package}'" in metadata, f'Unexpected application ID in {name}'
@@ -94,7 +101,8 @@ for name, package, minimum in [
 distribution = None if a.allow_local_auth else create_bundle(root, destination)
 manifest = dict(
     builtAtUtc=datetime.now(timezone.utc).isoformat(), commit=source_info['revision'], repository=source_info['repository'], distribution=distribution,
-    tag=release['tag'] if release else None, signing='development',
+    tag=release['tag'] if release else None, signing='persistent' if signing_certificate else 'development',
+    signingCertificateSha256=signing_certificate or None,
     authentication='upstream-release' if a.release_auth else 'local-private' if a.allow_local_auth else 'not-bundled',
     authenticationSource=auth_source, deviceTested=report is not None, deviceTestReport=report, apks=artifacts,
 )
@@ -119,7 +127,9 @@ if release:
 - **Receiver (`KrPlay-{release['tag']}.apk`)**: Includes and verifies matching runtime CarPlay authentication assets; supports system hotspot and USB wired connections.
 - **Head Unit (`KrPlay-Client-{release['tag']}.apk`)**: Ultra-lightweight with zero native library dependencies; automatically discovers and streams CarPlay display to the car screen.
 - Source code is available via GitHub's automatic Source Code (zip / tar.gz) archives.
-- Both APKs use development signing. Please allow installation prompts when prompted on your device.
+- Both apps check GitHub Releases at startup and offer direct APK updates or the official download website: https://krplay.pages.dev/. Manual update checks are available in settings.
+- Both APKs use the persistent project signing key. Android will still ask you to confirm installation.
+- Signing certificate SHA-256: `{signing_certificate}`. Versions signed with a different key require a one-time manual reinstall.
 """
     (destination / 'RELEASE-NOTES.md').write_text(notes)
 (destination / 'artifacts.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')

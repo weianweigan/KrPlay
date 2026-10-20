@@ -5,39 +5,29 @@ export const REPO_NAME = 'KrPlay';
 export const GITHUB_REPO_URL = `https://github.com/${REPO_OWNER}/${REPO_NAME}`;
 export const GITHUB_RELEASES_URL = `${GITHUB_REPO_URL}/releases`;
 
-const FALLBACK_TAG = 'v0.4.2';
+const FALLBACK_TAG = 'v0.4.4';
 
-const FALLBACK_RELEASE: ReleaseInfo = {
+export const FALLBACK_RELEASE: ReleaseInfo = {
   tag: FALLBACK_TAG,
   name: `KrPlay ${FALLBACK_TAG}`,
-  publishedAt: '2026-10-19',
+  publishedAt: '2026-10-20',
   htmlUrl: `${GITHUB_RELEASES_URL}/tag/${FALLBACK_TAG}`,
-  body: '优化车机大屏触控延迟，完善双向音频麦克风调度，更新借网 VPN 服务稳定性。',
+  body: '两端新增启动更新检查、直接下载安装和官网下载入口；使用固定发布签名。',
   assets: {
     receiverApk: {
-      name: 'KrPlay-debug.apk',
-      size: 16800000,
-      downloadUrl: `${GITHUB_RELEASES_URL}/download/${FALLBACK_TAG}/KrPlay-debug.apk`,
+      name: `KrPlay-${FALLBACK_TAG}.apk`,
+      size: 54303835,
+      downloadUrl: `${GITHUB_RELEASES_URL}/download/${FALLBACK_TAG}/KrPlay-${FALLBACK_TAG}.apk`,
     },
     clientApk: {
-      name: 'KrPlay-Client-debug.apk',
-      size: 12400000,
-      downloadUrl: `${GITHUB_RELEASES_URL}/download/${FALLBACK_TAG}/KrPlay-Client-debug.apk`,
+      name: `KrPlay-Client-${FALLBACK_TAG}.apk`,
+      size: 610421,
+      downloadUrl: `${GITHUB_RELEASES_URL}/download/${FALLBACK_TAG}/KrPlay-Client-${FALLBACK_TAG}.apk`,
     },
     sourceZip: {
       name: `KrPlay-source-${FALLBACK_TAG}.zip`,
       size: 4500000,
-      downloadUrl: `${GITHUB_RELEASES_URL}/download/${FALLBACK_TAG}/KrPlay-source-${FALLBACK_TAG}.zip`,
-    },
-    licensesZip: {
-      name: 'KrPlay-licenses.zip',
-      size: 210000,
-      downloadUrl: `${GITHUB_RELEASES_URL}/download/${FALLBACK_TAG}/KrPlay-licenses.zip`,
-    },
-    artifactsJson: {
-      name: 'artifacts.json',
-      size: 2048,
-      downloadUrl: `${GITHUB_RELEASES_URL}/download/${FALLBACK_TAG}/artifacts.json`,
+      downloadUrl: `${GITHUB_REPO_URL}/archive/refs/tags/${FALLBACK_TAG}.zip`,
     },
     all: [],
   },
@@ -81,30 +71,26 @@ export async function fetchLatestRelease(): Promise<ReleaseInfo> {
     return {
       tag: data.tag_name || FALLBACK_TAG,
       name: data.name || `KrPlay ${data.tag_name}`,
-      publishedAt: data.published_at ? data.published_at.split('T')[0] : '2026-10-19',
+      publishedAt: data.published_at ? data.published_at.split('T')[0] : '2026-10-20',
       htmlUrl: data.html_url || `${GITHUB_RELEASES_URL}/tag/${data.tag_name}`,
       body: data.body || '',
       assets: {
         receiverApk: receiverApk || {
-          name: 'KrPlay-debug.apk',
+          name: `KrPlay-${data.tag_name}.apk`,
           size: 16800000,
-          downloadUrl: `${GITHUB_RELEASES_URL}/download/${data.tag_name}/KrPlay-debug.apk`,
+          downloadUrl: `${GITHUB_RELEASES_URL}/download/${data.tag_name}/KrPlay-${data.tag_name}.apk`,
         },
         clientApk: clientApk || {
-          name: 'KrPlay-Client-debug.apk',
+          name: `KrPlay-Client-${data.tag_name}.apk`,
           size: 12400000,
-          downloadUrl: `${GITHUB_RELEASES_URL}/download/${data.tag_name}/KrPlay-Client-debug.apk`,
+          downloadUrl: `${GITHUB_RELEASES_URL}/download/${data.tag_name}/KrPlay-Client-${data.tag_name}.apk`,
         },
         sourceZip: sourceZip || {
           name: `KrPlay-source-${data.tag_name}.zip`,
           size: 4500000,
-          downloadUrl: `${GITHUB_RELEASES_URL}/download/${data.tag_name}/KrPlay-source-${data.tag_name}.zip`,
+          downloadUrl: `${GITHUB_REPO_URL}/archive/refs/tags/${data.tag_name}.zip`,
         },
-        licensesZip: licensesZip || {
-          name: 'KrPlay-licenses.zip',
-          size: 210000,
-          downloadUrl: `${GITHUB_RELEASES_URL}/download/${data.tag_name}/KrPlay-licenses.zip`,
-        },
+        licensesZip,
         artifactsJson,
         all: allAssets,
       },

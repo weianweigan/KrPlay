@@ -72,9 +72,23 @@ jobs:
         working-directory: krplay
         run: ./gradlew --no-daemon :common:testDebugUnitTest :shared:testDebugUnitTest
 
+      - name: Provision persistent APK update signing key
+        id: signing
+        env:
+          KRPLAY_UPDATE_KEYSTORE_BASE64: ${{ secrets.KRPLAY_UPDATE_KEYSTORE_BASE64 }}
+          KRPLAY_UPDATE_KEYSTORE_PASSWORD: ${{ secrets.KRPLAY_UPDATE_KEYSTORE_PASSWORD }}
+          KRPLAY_UPDATE_KEY_ALIAS: ${{ secrets.KRPLAY_UPDATE_KEY_ALIAS }}
+          KRPLAY_UPDATE_KEY_PASSWORD: ${{ secrets.KRPLAY_UPDATE_KEY_PASSWORD }}
+        run: python3 scripts/update_signing.py
+
       - name: Test and build tag-versioned car client
         working-directory: krplay-client
-        run: ./gradlew --no-daemon testDebugUnitTest exportKrPlayDebug
+        env:
+          KRPLAY_UPDATE_KEYSTORE_PATH: ${{ runner.temp }}/krplay-update.keystore
+          KRPLAY_UPDATE_KEYSTORE_PASSWORD: ${{ secrets.KRPLAY_UPDATE_KEYSTORE_PASSWORD }}
+          KRPLAY_UPDATE_KEY_ALIAS: ${{ secrets.KRPLAY_UPDATE_KEY_ALIAS }}
+          KRPLAY_UPDATE_KEY_PASSWORD: ${{ secrets.KRPLAY_UPDATE_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon --no-configuration-cache testDebugUnitTest exportKrPlayDebug
 
       - name: Download, verify and extract pinned authentication files
         run: python3 scripts/download_auth_assets.py --output "$RUNNER_TEMP/krplay-auth"
@@ -83,16 +97,25 @@ jobs:
         working-directory: krplay
         env:
           KRPLAY_AUTH_ASSETS_DIR: ${{ runner.temp }}/krplay-auth
+          KRPLAY_UPDATE_KEYSTORE_PATH: ${{ runner.temp }}/krplay-update.keystore
+          KRPLAY_UPDATE_KEYSTORE_PASSWORD: ${{ secrets.KRPLAY_UPDATE_KEYSTORE_PASSWORD }}
+          KRPLAY_UPDATE_KEY_ALIAS: ${{ secrets.KRPLAY_UPDATE_KEY_ALIAS }}
+          KRPLAY_UPDATE_KEY_PASSWORD: ${{ secrets.KRPLAY_UPDATE_KEY_PASSWORD }}
         run: ./gradlew --no-daemon --no-build-cache --no-configuration-cache :mobile:assembleProvisionedDebug :mobile:exportKrPlayDebug
 
       - name: Verify APKs and package exact source, licenses and release notes
         env:
           KRPLAY_AUTH_ASSETS_DIR: ${{ runner.temp }}/krplay-auth
+          KRPLAY_UPDATE_CERTIFICATE_SHA256: ${{ steps.signing.outputs.certificate_sha256 }}
         run: python3 scripts/package_artifacts.py --release-auth
 
       - name: Remove extracted authentication files
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/krplay-auth"
+
+      - name: Remove temporary APK signing key
+        if: always()
+        run: python3 -c "import os; from pathlib import Path; (Path(os.environ['RUNNER_TEMP']) / 'krplay-update.keystore').unlink(missing_ok=True)"
 
       - name: Upload verified release bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

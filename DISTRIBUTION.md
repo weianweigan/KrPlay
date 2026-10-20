@@ -35,8 +35,8 @@ Modified archive contents are identified as a local working tree instead.
 3. Run `python3 scripts/package_artifacts.py` with the Android/JDK environment
    configured. Public packaging rejects a dirty/uncommitted tree, stale APK
    provenance, missing notice assets and unexpected credentials. CI verifies
-   its revision equals `GITHUB_SHA`. This requires no signing or authentication
-   secrets. Generated output goes to ignored `dist/`.
+   its revision equals `GITHUB_SHA`. Public tag builds require the persistent
+   APK signing secrets described below; authentication is provisioned separately. Generated output goes to ignored `dist/`.
 4. Keep the whole resulting bundle together. For a GitHub Release, upload the
    two APKs, source ZIP, license ZIP, checksums and manifest on the same public
    release page; link directly to that source ZIP in the release description.
@@ -101,3 +101,40 @@ Third-party and trademark restrictions remain listed in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), especially maintainer-supplied
 Figma images, Apple assets and Zeekr marks. Adding a source archive and notice
 viewer does not resolve those separate permissions.
+
+## In-app updates
+
+Both applications check the latest non-draft, non-prerelease GitHub Release
+once on process startup. An unavailable network or API does not block startup.
+Settings also provide a manual check with retry and visible error details.
+The prompt offers direct update, the official download website
+<https://krplay.pages.dev/>, or postponement. Every manual-download/fallback
+entry opens that website.
+
+Direct update selects `KrPlay-<tag>.apk` or `KrPlay-Client-<tag>.apk` from that
+release, with support for the older `*-debug.apk` names. It verifies download
+size, GitHub's SHA-256 digest when supplied, package ID, release version,
+increasing Android versionCode and matching signing certificates. It then
+requests permission to install unknown apps and opens Android's installation
+confirmation. Leaving the update screen cancels an active download; the user
+can retry later.
+
+For successive APKs to support in-place updates, publishers must retain the
+same application ID and signing key and increment Android versionCode. Public
+CI requires `KRPLAY_UPDATE_KEYSTORE_BASE64`, `KRPLAY_UPDATE_KEYSTORE_PASSWORD`,
+`KRPLAY_UPDATE_KEY_ALIAS` and `KRPLAY_UPDATE_KEY_PASSWORD` repository Secrets.
+Missing or invalid signing configuration stops the build. Both APKs keep their
+existing IDs and use this persistent key; local builds without these variables
+still use development signing.
+
+The runner restores the key only in temporary storage, signs without Gradle
+configuration caching, verifies both APK certificate fingerprints against the
+provisioned certificate, and removes the key even when a build fails. The public
+fingerprint is recorded in release metadata and notes. Signing passwords and
+keystores are excluded from release artifacts and source archives.
+
+Existing APKs signed with another key cannot be updated in place with this key.
+The update page explains the mismatch and offers the official website. A one-time
+manual reinstall can remove settings; the app never uninstalls itself.
+See [fixed signing setup](docs/update-signing.zh-CN.md) for interactive key
+generation, backups, Secrets setup, and local signing environment variables.
