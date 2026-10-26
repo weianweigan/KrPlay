@@ -76,6 +76,21 @@ public class NaluStreamPlayerTest {
         }
     }
 
+    @Test public void silentConnectionRetriesMissingKeyframeWithoutReconnecting()throws Exception {
+        AtomicInteger requests=new AtomicInteger();
+        NaluStreamPlayer player=new NaluStreamPlayer("127.0.0.1",requests::incrementAndGet,s->{},(w,h)->{},new PerformanceStats());
+        LocalTransport.network=null;
+        try(ServerSocket server=new ServerSocket(8081,1,InetAddress.getLoopbackAddress())) {
+            server.setSoTimeout(3000);set(player,"running",true);
+            Thread reader=loop(player,"loop");set(player,"reader",reader);
+            try(Socket peer=server.accept()) {
+                await(()->requests.get()>=2);
+                assertEquals(0,player.reconnects.get());assertTrue(requests.get()<=3);
+                assertTrue(player.waitingForKeyFrame());assertEquals(-1,player.videoIdleMs());
+            }finally{player.close();reader.join(3000);assertFalse(reader.isAlive());}
+        }
+    }
+
     @Test public void codecFailureReportsReasonWithoutClosingVideoSocket()throws Exception {
         AtomicReference<String> status=new AtomicReference<>("");AtomicBoolean closed=new AtomicBoolean();
         NaluStreamPlayer player=new NaluStreamPlayer("127.0.0.1",()->{},status::set,(w,h)->{},new PerformanceStats());
@@ -86,5 +101,14 @@ public class NaluStreamPlayerTest {
         Thread decoder=loop(player,"decodeLoop");set(player,"codecThread",decoder);
         try{await(()->status.get().contains("Invalid resolution"));assertFalse(closed.get());assertEquals(0,player.reconnects.get());}
         finally{player.close();decoder.join(3000);assertFalse(decoder.isAlive());}
+    }
+    @Test public void serverCanInvalidateAHalfOpenVideoConnectionWithoutTreatingStaticVideoAsFailure()throws Exception {
+        NaluStreamPlayer player=new NaluStreamPlayer("127.0.0.1",()->{},s->{},(w,h)->{},new PerformanceStats());
+        AtomicBoolean closed=new AtomicBoolean();Socket socket=new Socket(){@Override public synchronized void close(){closed.set(true);}};
+        set(player,"socket",socket);set(player,"connectedAtNs",System.nanoTime());
+        player.serverHasVideoClient(false);assertFalse("Allow new video/control connections to settle",closed.get());
+        set(player,"connectedAtNs",System.nanoTime()-3_000_000_000L);
+        player.serverHasVideoClient(true);assertFalse("A static screen with a valid server socket stays connected",closed.get());
+        player.serverHasVideoClient(false);assertTrue("A server-confirmed stale socket must reconnect",closed.get());
     }
 }

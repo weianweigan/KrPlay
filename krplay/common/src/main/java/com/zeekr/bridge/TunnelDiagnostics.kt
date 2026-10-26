@@ -15,7 +15,9 @@ object TunnelDiagnostics {
     private val busy=AtomicBoolean()
     @Volatile private var socket:Socket?=null
     @Volatile var latest=JSONObject().put("state","idle");private set
-    fun start(speed:Boolean){if(!busy.compareAndSet(false,true))return
+    fun start(speed:Boolean){if(!com.krplay.protocol.NetworkFeatures.BORROWING_ENABLED){
+        latest=JSONObject().put("state","disabled").put("error","借网功能暂未开放");ZeekrBridgeManager.publishStatus();return
+    };if(!busy.compareAndSet(false,true))return
         latest=JSONObject().put("state","running").put("kind",if(speed)"speed" else "connectivity");ZeekrBridgeManager.publishStatus()
         executor.execute {
             var transport:Socket?=null

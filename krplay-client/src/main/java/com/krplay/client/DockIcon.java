@@ -18,6 +18,7 @@ final class DockIcon extends Drawable {
             case "settings":canvas.drawCircle(12,12,4,paint);for(int i=0;i<8;i++){double a=i*Math.PI/4;line(canvas,(float)(12+7*Math.cos(a)),(float)(12+7*Math.sin(a)),(float)(12+9*Math.cos(a)),(float)(12+9*Math.sin(a)));}break;
             case "refresh":canvas.drawArc(4,4,20,20,35,290,false,paint);p.moveTo(20,4);p.lineTo(20,10);p.lineTo(14,10);canvas.drawPath(p,paint);break;
             case "hide":p.moveTo(9,5);p.lineTo(16,12);p.lineTo(9,19);canvas.drawPath(p,paint);break;
+            case "exit":canvas.drawArc(4,4,20,20,-55,290,false,paint);line(canvas,12,2,12,12);break;
             default:p.moveTo(15,5);p.lineTo(8,12);p.lineTo(15,19);canvas.drawPath(p,paint);
         }canvas.restore();
     }

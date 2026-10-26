@@ -13,7 +13,7 @@ import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.Config;
 import static org.junit.Assert.*;
 
-@RunWith(RobolectricTestRunner.class) @Config(sdk=29)
+@RunWith(RobolectricTestRunner.class) @Config(sdk={29,32})
 public class ClientWindowInsetsTest {
     private static Object field(Object owner,String name)throws Exception {
         Field f=owner.getClass().getDeclaredField(name);f.setAccessible(true);return f.get(owner);
@@ -51,7 +51,41 @@ public class ClientWindowInsetsTest {
         try {
             FrameLayout stage=(FrameLayout)field(controller.get(),"stage");View root=(View)stage.getParent();
             insets(root,0,0,0,0);assertEquals(0,root.getPaddingBottom());assertEquals(800,stage.getHeight());
-            insets(root,48,24,0,96);assertEquals(1232,stage.getWidth());assertEquals(680,stage.getHeight());
+            insets(root,48,24,0,96);assertEquals(1232,stage.getWidth());assertEquals(704,stage.getHeight());
+            assertEquals(0,stage.getTop());
+            View controls=((android.view.ViewGroup)root).getChildAt(1);
+            assertEquals(24,controls.getTop());assertEquals(680,controls.getHeight());
+        }finally{controller.destroy();}
+    }
+    @Test public void cutoutStillProtectsVideoAndControls()throws Exception {
+        ActivityController<MainActivity> controller=Robolectric.buildActivity(MainActivity.class).create();
+        try {
+            FrameLayout stage=(FrameLayout)field(controller.get(),"stage");View root=(View)stage.getParent();
+            android.graphics.Rect notch=new android.graphics.Rect(550,0,650,40);
+            android.view.DisplayCutout cutout=new android.view.DisplayCutout(
+                new android.graphics.Rect(0,40,0,0),java.util.Collections.singletonList(notch));
+            WindowInsets insets=new WindowInsets.Builder().setSystemWindowInsets(Insets.of(0,24,0,96))
+                .setDisplayCutout(cutout).build();
+            root.dispatchApplyWindowInsets(insets);layout(root);
+            assertEquals(40,stage.getTop());assertEquals(664,stage.getHeight());
+            assertEquals(40,((android.view.ViewGroup)root).getChildAt(1).getTop());
+        }finally{controller.destroy();}
+    }
+    @Test @Config(sdk=32) public void captionAndSideToolbarRemainProtected()throws Exception {
+        ActivityController<MainActivity> controller=Robolectric.buildActivity(MainActivity.class).create();
+        try {
+            FrameLayout stage=(FrameLayout)field(controller.get(),"stage");View root=(View)stage.getParent();
+            WindowInsets insets=new WindowInsets.Builder()
+                .setInsets(WindowInsets.Type.statusBars(),Insets.of(0,24,0,0))
+                .setInsets(WindowInsets.Type.captionBar(),Insets.of(0,48,0,0))
+                .setInsets(WindowInsets.Type.navigationBars(),Insets.of(0,0,80,96)).build();
+            root.dispatchApplyWindowInsets(insets);layout(root);
+            assertEquals(48,stage.getTop());assertEquals(1200,stage.getWidth());assertEquals(656,stage.getHeight());
+            // Re-dispatch and split-window resize must retain the same safe area.
+            root.dispatchApplyWindowInsets(insets);
+            root.measure(View.MeasureSpec.makeMeasureSpec(900,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(600,View.MeasureSpec.EXACTLY));
+            root.layout(0,0,900,600);
+            assertEquals(820,stage.getWidth());assertEquals(456,stage.getHeight());
         }finally{controller.destroy();}
     }
     @Test public void unmeasuredViewportNeverFallsBackToPhysicalScreenSize()throws Exception {

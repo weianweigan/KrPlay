@@ -45,7 +45,7 @@ object ZeekrBridgeManager {
     private var viewport:((Int,Int)->Unit)?=null
     fun setViewportListener(listener:((Int,Int)->Unit)?){viewport=listener;if(running)listener?.invoke(width,height)}
     @Synchronized fun start(context:Context){if(running)return
-        try{appContext=context.applicationContext;sourceDistribution=com.krplay.distribution.SourceDistribution.info(context);listener=ServerSocket(8082);stream.start();hub.start();probe.start();box=BoxVirtualDisplayEngine(context.applicationContext,stream);running=true
+        try{appContext=context.applicationContext;sourceDistribution=com.krplay.distribution.SourceDistribution.info(context);listener=ServerSocket(8082);stream.start();if(com.krplay.protocol.NetworkFeatures.BORROWING_ENABLED)hub.start();probe.start();box=BoxVirtualDisplayEngine(context.applicationContext,stream);running=true
             val server=listener!!
             Thread({while(running){val s=try{server.accept()}catch(_:Exception){break};if(!running){Wire.close(s);break};try{Wire.socket(s);s.soTimeout=15000;synchronized(this){Wire.close(control);stream.timingEnabled=false;control=s};sendStatus(s);Thread({controlLoop(s)},"KrPlay-Control").start()}catch(_:Exception){Wire.close(s)}}},"KrPlay-Control-Accept").start()
         }catch(e:Exception){stop();Log.e("KrPlay","Bridge startup failed",e)}
@@ -62,6 +62,7 @@ object ZeekrBridgeManager {
         7->{val speed=input.readUnsignedByte();require(speed in 0..1);if(control===s)TunnelDiagnostics.start(speed==1)}
         8->{val enabled=input.readUnsignedByte();require(enabled in 0..1);if(control===s){val context=appContext!!
             if(enabled==0){if(NetworkAccessSettings.automatic(context))context.startForegroundService(Intent(context,BorrowVpnService::class.java).setAction("access"))else context.stopService(Intent(context,BorrowVpnService::class.java))}
+            else if(!com.krplay.protocol.NetworkFeatures.BORROWING_ENABLED){error="借网功能暂未开放"}
             else if(VpnService.prepare(context)==null)context.startForegroundService(Intent(context,BorrowVpnService::class.java))
             else{pendingVpn=true;error="请在安卓设备上打开 KrPlay，允许 VPN 连接"};publishStatus()
         }}
@@ -82,11 +83,11 @@ object ZeekrBridgeManager {
     private fun sendStatus(socket:Socket,probeId:Long?=null,receivedNs:Long=0){try{
         val stats=BorrowVpnService.stats()
         val state=JSONObject().put("sourceDistribution",sourceDistribution).put("protocol",2).put("mode",mode).put("rootScreen",rootScreenAvailable())
-            .put("vpn",BorrowVpnService.active).put("vpnMessage",BorrowVpnService.message).put("idleWorkers",hub.idleWorkers())
+            .put("borrowingAvailable",com.krplay.protocol.NetworkFeatures.BORROWING_ENABLED).put("vpn",BorrowVpnService.active).put("vpnMessage",BorrowVpnService.message).put("idleWorkers",hub.idleWorkers())
             .put("iphoneStage",com.shilapi.xcertplay.ConnectionDiagnostics.stage).put("iphoneError",com.shilapi.xcertplay.ConnectionDiagnostics.lastFailure?:"")
             .put("error",error).put("vpnConsentRequired",pendingVpn).put("txBytes",stats[1]).put("rxBytes",stats[3]).put("test",TunnelDiagnostics.latest)
         state.put("fixedEntry",BorrowVpnService.accessActive).put("fixedEntryMessage",BorrowVpnService.accessMessage)
-        state.put("audio",ClientAudioRoute.snapshot()).put("stream",JSONObject().put("slowDisconnects",stream.slowDisconnects.get()).put("sourceResets",stream.sourceResets.get()).put("queueRecoveries",stream.queueRecoveries.get()).put("sendFailures",stream.sendFailures.get()))
+        state.put("audio",ClientAudioRoute.snapshot()).put("stream",JSONObject().put("connected",stream.connected).put("slowDisconnects",stream.slowDisconnects.get()).put("sourceResets",stream.sourceResets.get()).put("queueRecoveries",stream.queueRecoveries.get()).put("sendFailures",stream.sendFailures.get()).put("waitingKeyFrame",stream.waitingForKeyFrame).put("keyframeRequests",stream.keyframeRequests.get()))
         if(probeId!=null)state.put("probe",JSONObject().put("t0",probeId).put("t1",receivedNs).put("t2",System.nanoTime()))
         val bytes=state.toString().toByteArray(Charsets.UTF_8);check(bytes.size<=16384)
         synchronized(statusLock){val out=DataOutputStream(socket.getOutputStream());out.writeByte(128);out.writeShort(bytes.size);out.write(bytes);out.flush()}

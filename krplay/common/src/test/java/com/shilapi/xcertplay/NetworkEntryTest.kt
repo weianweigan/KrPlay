@@ -25,9 +25,14 @@ class NetworkEntryTest {
         val second=org.robolectric.Robolectric.buildActivity(DiPlayActivity::class.java).setup()
         try{assertNull(org.robolectric.Shadows.shadowOf(second.get()).nextStartedActivity)}finally{second.pause().stop().destroy()}
     }
+    @Test fun disabledBorrowingProbeNeverStartsExternalDownload(){
+        TunnelDiagnostics.start(true)
+        assertEquals("disabled",TunnelDiagnostics.latest.getString("state"))
+    }
     @Test fun fixedEntryDoesNotCaptureDefaultRoutesDnsOrEnableInternetProxy(){
         val p=NetworkVpnPlan.forBorrowing(false);assertFalse(p.forwarding);assertTrue(p.dns.isEmpty())
         assertTrue(p.routes.all{it.prefix==32});assertEquals(listOf(VpnNetwork("192.168.229.229",32)),p.routes)
-        val borrow=NetworkVpnPlan.forBorrowing(true);assertTrue(borrow.forwarding);assertEquals(setOf("0.0.0.0","::"),borrow.routes.filter{it.prefix==0}.map{it.address}.toSet());assertFalse(borrow.dns.isEmpty())
+        // Stale callers cannot capture default routes while borrowing is paused.
+        val borrow=NetworkVpnPlan.forBorrowing(true);assertFalse(borrow.forwarding);assertTrue(borrow.dns.isEmpty());assertEquals(p,borrow)
     }
 }

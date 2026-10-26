@@ -48,6 +48,20 @@ upstream project, not the current public KrPlay build.
   Runtime versions are specified by the Gradle files and version catalog.
 - Historical NanoHTTPD/Quickie notices remain in `krplay/docs/`; retaining a
   notice does not mean a removed library is a current runtime dependency.
+- Separate local KrPlay Box development project (not included in this Android
+  release or its source archive): reuses the same AirPlay/iAP2 and Concentus sources.
+  Its portable JVM package includes Kotlin stdlib (Apache-2.0), Gson 2.11.0
+  (Apache-2.0), and Bouncy Castle 1.79 (MIT-style); exact library JARs and
+  license texts are included in the package. BlueZ, NetworkManager,
+  dnsmasq, Avahi, libusb, libimobiledevice, usbmuxd and FFmpeg are installed
+  separately through the operating system package manager and retain their
+  respective licenses. Corresponding application source and build scripts
+  are included under the Box package's `source/` directory.
+  Bookworm usbmuxd 1.1.1 additionally uses a privately built compatibility
+  executable. The original Debian 1.1.1-2+deb12u1 source package, SHA-256
+  digests, security patches and KrPlay's USB configuration patch are included
+  under its local `krplay-box/vendor/usbmuxd/` directory. Its GPL-2.0-or-3.0 notices remain intact;
+  the installer also retains the exact patched source beside the executable.
 
 ## Images and marks
 

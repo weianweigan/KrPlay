@@ -18,10 +18,12 @@ class RawTcpNaluServer(private val port: Int = 8081, private val requestIdr: () 
     val sourceResets=java.util.concurrent.atomic.AtomicLong()
     val queueRecoveries=java.util.concurrent.atomic.AtomicLong()
     val sendFailures=java.util.concurrent.atomic.AtomicLong()
+    val keyframeRequests=java.util.concurrent.atomic.AtomicLong()
     private class Client(val socket: Socket) {
         val queue=ArrayBlockingQueue<Packet>(4)
         @Volatile var writingSince=0L
         @Volatile var waitingKey=true
+        val requests=com.krplay.protocol.VideoPolicy.KeyframeRequests()
     }
     @Volatile var timingEnabled=false
     @Volatile private var running=false
@@ -30,10 +32,11 @@ class RawTcpNaluServer(private val port: Int = 8081, private val requestIdr: () 
     private var watchdog: java.util.concurrent.ScheduledExecutorService?=null
     private val configs=sortedMapOf<Int,ByteArray>()
     private var codecHevc=false
-    private var cachedCsd: ByteArray?=null
+    @Volatile private var cachedCsd: ByteArray?=null
     private var cachedIdr: ByteArray?=null
     private var width=1920; private var height=1080
     val connected get() = client!=null
+    val waitingForKeyFrame get() = client?.waitingKey==true
 
     @Synchronized fun start() {
         if(running)return
@@ -42,7 +45,12 @@ class RawTcpNaluServer(private val port: Int = 8081, private val requestIdr: () 
         watchdog=Executors.newSingleThreadScheduledExecutor().also { executor ->
             // Large IDRs and brief Wi-Fi stalls can take more than 120ms. Queue recovery
             // already bounds buffered video; only abandon a persistently blocked writer.
-            executor.scheduleAtFixedRate({client?.let { if(it.writingSince!=0L && System.nanoTime()-it.writingSince>2_000_000_000L){slowDisconnects.incrementAndGet();it.writingSince=0;Wire.close(it.socket)} }},100,100,TimeUnit.MILLISECONDS)
+            executor.scheduleAtFixedRate({client?.let {
+                if(it.writingSince!=0L && System.nanoTime()-it.writingSince>2_000_000_000L){slowDisconnects.incrementAndGet();it.writingSince=0;Wire.close(it.socket)}
+                // An upstream request may be coalesced or lost. Retry even when a static
+                // source sends no more slices: otherwise waitingKey can persist forever.
+                if(it.waitingKey && cachedCsd!=null)requestKeyFrame(it)
+            }},100,100,TimeUnit.MILLISECONDS)
         }
         Thread({while(running) { val socket=try{listener.accept()}catch(_:Exception){break}
             try { Wire.socket(socket); val c=Client(socket)
@@ -52,7 +60,7 @@ class RawTcpNaluServer(private val port: Int = 8081, private val requestIdr: () 
                     cachedCsd?.let { enqueue(c,if(codecHevc)3 else 2,0,it) }
                     cachedIdr?.let { enqueue(c,if(codecHevc)1 else 0,0,it) }
                 }
-                Thread({send(c)},"KrPlay-NALU-Send").start();requestIdr()
+                Thread({send(c)},"KrPlay-NALU-Send").start();requestKeyFrame(c)
             } catch(_:Exception){Wire.close(socket)}
         }},"KrPlay-NALU-Accept").start()
     }
@@ -85,14 +93,19 @@ class RawTcpNaluServer(private val port: Int = 8081, private val requestIdr: () 
         if(!hasSlice)return
         if(key)cachedIdr=src.copyOfRange(offset,end)
         val c=client?:return
-        if(c.waitingKey&&!key)return
+        if(c.waitingKey&&!key){requestKeyFrame(c);return}
         if(c.queue.remainingCapacity()<(if(key)2 else 1) || free.size<(if(key)2 else 1)){
             queueRecoveries.incrementAndGet()
             while(true){val p=c.queue.poll()?:break;free.offer(p)};c.waitingKey=true
-            if(!key){requestIdr();return}
+            if(!key){requestKeyFrame(c);return}
         }
         if(key){cachedCsd?.let { enqueue(c,if(hevc)3 else 2,0,it) };c.waitingKey=false}
         enqueue(c,if(hevc)1 else 0,pts,src,offset,length,receivedNs)
+    }
+    private fun requestKeyFrame(c:Client){
+        if(running && client===c && !c.socket.isClosed && c.requests.acquire(System.nanoTime())){
+            keyframeRequests.incrementAndGet();runCatching{requestIdr()}
+        }
     }
     private fun startCode(b:ByteArray,i:Int,end:Int):Int = if(i+2<end && b[i]==0.toByte()&&b[i+1]==0.toByte()) when {
         b[i+2]==1.toByte()->3

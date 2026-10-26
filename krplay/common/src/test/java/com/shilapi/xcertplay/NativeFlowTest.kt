@@ -21,7 +21,7 @@ class NativeFlowTest {
             assertEquals(3,tabs.menu.size());assertEquals(1,tabs.selectedItemId)
             assertNull(shadowOf(a).nextStartedActivity)
             val text=all.filterIsInstance<TextView>().joinToString("\n"){it.text}
-            assertTrue(text.contains("车机连接"));assertTrue(text.contains("车载借网"));assertFalse(text.contains("扫描二维码配对"));assertFalse(text.contains("从 DiPlay APK 导入"))
+            assertTrue(text.contains("车机连接"));assertEquals(com.krplay.protocol.NetworkFeatures.BORROWING_ENABLED,text.contains("车载借网"));assertFalse(text.contains("扫描二维码配对"));assertFalse(text.contains("从 DiPlay APK 导入"))
             tabs.selectedItemId=2;assertEquals(2,tabs.selectedItemId)
             assertNull(shadowOf(a).nextStartedActivity)
         }finally{controller.pause().stop().destroy()}

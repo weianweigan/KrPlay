@@ -15,18 +15,25 @@ import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowDialog;
 import static org.junit.Assert.*;
 
-@RunWith(RobolectricTestRunner.class) @Config(sdk=29)
+@RunWith(RobolectricTestRunner.class) @Config(sdk={29,32})
 public class WindowModeTest {
     private static void assertNoFullscreenRequest(Window window) {
         assertEquals(0,window.getAttributes().flags&WindowManager.LayoutParams.FLAG_FULLSCREEN);
         int immersive=View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
             |View.SYSTEM_UI_FLAG_IMMERSIVE|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-            |View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+            |View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
         assertEquals(0,window.getDecorView().getSystemUiVisibility()&immersive);
+    }
+    private static void assertTransparentStatusBar(Window window) {
+        assertEquals(android.graphics.Color.TRANSPARENT,window.getStatusBarColor());
+        assertFalse(window.isStatusBarContrastEnforced());
+        assertEquals(0,window.getDecorView().getSystemUiVisibility()&View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+        if(android.os.Build.VERSION.SDK_INT<30)assertTrue((window.getDecorView().getSystemUiVisibility()
+            &View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN)!=0);
     }
     @Test public void launchLeavesWindowModeToTheHeadUnit() {
         ActivityController<MainActivity> controller=Robolectric.buildActivity(MainActivity.class).create();
-        try{assertNoFullscreenRequest(controller.get().getWindow());}
+        try{assertNoFullscreenRequest(controller.get().getWindow());assertTransparentStatusBar(controller.get().getWindow());}
         finally{controller.destroy();}
     }
     @Test public void outsidePerformanceDialogDismissalDoesNotRestoreImmersiveMode()throws Exception {outsideDismissal("showPerformance");}
@@ -47,6 +54,7 @@ public class WindowModeTest {
                 assertFalse(dialog.isShowing());
                 activity.onWindowFocusChanged(true);
                 assertNoFullscreenRequest(activity.getWindow());
+                assertTransparentStatusBar(activity.getWindow());
             }
         }finally{if(dialog!=null)dialog.dismiss();controller.destroy();}
     }

@@ -16,7 +16,7 @@ final class ReverseSocks5Worker implements AutoCloseable {
     private volatile boolean running;private final Set<Socket> sockets=ConcurrentHashMap.newKeySet();
     private final AtomicInteger idle=new AtomicInteger(),total=new AtomicInteger();private Thread maintainer;
     ReverseSocks5Worker(Context c,String h,Consumer<String> s){host=h;cm=(ConnectivityManager)c.getSystemService(Context.CONNECTIVITY_SERVICE);status=s;}
-    void start(){if(running)return;running=true;maintainer=new Thread(()->{while(running){while(running&&idle.get()<8&&total.get()<32){idle.incrementAndGet();total.incrementAndGet();new Thread(this::worker,"KrPlay-SOCKS").start();}try{Thread.sleep(300);}catch(InterruptedException ignored){}}},"KrPlay-SOCKS-Pool");maintainer.start();}
+    void start(){if(!com.krplay.protocol.NetworkFeatures.BORROWING_ENABLED||running)return;running=true;maintainer=new Thread(()->{while(running){while(running&&idle.get()<8&&total.get()<32){idle.incrementAndGet();total.incrementAndGet();new Thread(this::worker,"KrPlay-SOCKS").start();}try{Thread.sleep(300);}catch(InterruptedException ignored){}}},"KrPlay-SOCKS-Pool");maintainer.start();}
     private Network internet()throws IOException{
         for(Network n:cm.getAllNetworks()){NetworkCapabilities c=cm.getNetworkCapabilities(n);if(c!=null&&c.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)&&c.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)&&c.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED))return n;}
         Network n=cm.getActiveNetwork();NetworkCapabilities c=n==null?null:cm.getNetworkCapabilities(n);

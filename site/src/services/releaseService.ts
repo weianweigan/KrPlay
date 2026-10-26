@@ -5,14 +5,14 @@ export const REPO_NAME = 'KrPlay';
 export const GITHUB_REPO_URL = `https://github.com/${REPO_OWNER}/${REPO_NAME}`;
 export const GITHUB_RELEASES_URL = `${GITHUB_REPO_URL}/releases`;
 
-const FALLBACK_TAG = 'v0.4.4';
+const FALLBACK_TAG = 'v0.4.5';
 
 export const FALLBACK_RELEASE: ReleaseInfo = {
   tag: FALLBACK_TAG,
   name: `KrPlay ${FALLBACK_TAG}`,
-  publishedAt: '2026-10-20',
+  publishedAt: '2026-10-26',
   htmlUrl: `${GITHUB_RELEASES_URL}/tag/${FALLBACK_TAG}`,
-  body: '两端新增启动更新检查、直接下载安装和官网下载入口；使用固定发布签名。',
+  body: '改善视频恢复与诊断、车机窗口适配，新增退出入口；借网功能暂时关闭。',
   assets: {
     receiverApk: {
       name: `KrPlay-${FALLBACK_TAG}.apk`,
@@ -71,7 +71,7 @@ export async function fetchLatestRelease(): Promise<ReleaseInfo> {
     return {
       tag: data.tag_name || FALLBACK_TAG,
       name: data.name || `KrPlay ${data.tag_name}`,
-      publishedAt: data.published_at ? data.published_at.split('T')[0] : '2026-10-20',
+      publishedAt: data.published_at ? data.published_at.split('T')[0] : '2026-10-26',
       htmlUrl: data.html_url || `${GITHUB_RELEASES_URL}/tag/${data.tag_name}`,
       body: data.body || '',
       assets: {

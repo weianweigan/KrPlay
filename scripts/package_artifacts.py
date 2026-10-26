@@ -124,6 +124,9 @@ if release:
 {apk_table}
 
 ## Notes
+- Improve video keyframe recovery, stale-connection handling and playback diagnostics.
+- Improve head-unit window insets and add an explicit client exit action.
+- Internet borrowing is temporarily disabled while the core projection path stabilizes.
 - **Receiver (`KrPlay-{release['tag']}.apk`)**: Includes and verifies matching runtime CarPlay authentication assets; supports system hotspot and USB wired connections.
 - **Head Unit (`KrPlay-Client-{release['tag']}.apk`)**: Ultra-lightweight with zero native library dependencies; automatically discovers and streams CarPlay display to the car screen.
 - Source code is available via GitHub's automatic Source Code (zip / tar.gz) archives.

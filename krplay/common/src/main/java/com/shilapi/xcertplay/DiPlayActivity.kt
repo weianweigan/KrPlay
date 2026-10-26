@@ -61,7 +61,7 @@ class DiPlayActivity : AppCompatActivity() {
     private var exportInProgress=false
     private var initialLaunch=true
     private var vpnRequestPending=false
-    private var requestedBorrow=true
+    private var requestedBorrow=false
     private var fixedEntryState:TextView?=null
     private val notificationPermission=registerForActivityResult(ActivityResultContracts.RequestPermission()){connect(notificationTransport)}
     private val bluetoothPermission=registerForActivityResult(ActivityResultContracts.RequestPermission()){granted->if(granted)choosePhone()else permissionHelp("附近设备权限","请允许蓝牙附近设备权限后重试")}
@@ -137,13 +137,13 @@ class DiPlayActivity : AppCompatActivity() {
                 setOnCheckedChangeListener{_,on->com.zeekr.bridge.NetworkAccessSettings.automatic(this@DiPlayActivity,on);if(on)requestVpn(false)else if(!com.zeekr.bridge.BorrowVpnService.active)stopService(Intent(this@DiPlayActivity,com.zeekr.bridge.BorrowVpnService::class.java))}}
             body.addView(automatic)
             body.addView(button("开启 / 重试固定入口",false){requestVpn(false)},matchButton(12))
-            body.addView(label("首次需要系统 VPN 授权。固定入口不接管外网；借网需单独开启。虚拟机仍需能路由到热点，固定 IP 无法绕过宿主的网络隔离。",14,MUTED))
+            body.addView(label("首次需要系统 VPN 授权。固定入口不接管外网。虚拟机仍需能路由到热点，固定 IP 无法绕过宿主的网络隔离。",14,MUTED))
         }
         ui.card(content,"iPhone 连接",R.drawable.ic_server_phone){body->
             body.addView(button("管理 iPhone",true,R.drawable.ic_server_phone){navigate("phone")},matchButton())
             body.addView(label("先在系统蓝牙配对 iPhone，再到 iPhone 页选择设备并连接。已有系统热点请使用系统热点模式，并填写准确的热点名称与密码。",15,MUTED))
         }
-        ui.card(content,"车载借网",R.drawable.ic_server_wifi){body->
+        if(com.krplay.protocol.NetworkFeatures.BORROWING_ENABLED)ui.card(content,"车载借网",R.drawable.ic_server_wifi){body->
             networkState=label("",15,TEXT);body.addView(networkState)
             vpnButton=button("连接车载网络 VPN",true){if(com.zeekr.bridge.BorrowVpnService.active){if(com.zeekr.bridge.NetworkAccessSettings.automatic(this))startVpn(false)else stopService(Intent(this,com.zeekr.bridge.BorrowVpnService::class.java))}else requestVpn()};body.addView(vpnButton,matchButton(12))
             body.addView(button("检测通道",false){com.zeekr.bridge.TunnelDiagnostics.start(false)},matchButton(12))
@@ -151,7 +151,7 @@ class DiPlayActivity : AppCompatActivity() {
             body.addView(label("CarPlay 和借网 VPN 无需 root。借网支持 TCP / DNS，UDP 暂未支持；设备画面和触控需 root。",14,MUTED))
         }
         ui.card(content,"中止服务",R.drawable.ic_media_stop){body->
-            body.addView(label("断开 iPhone 与车机连接，停止固定入口与借网 VPN，停止所有后台服务，清理相关内容并退出应用。",15,MUTED))
+            body.addView(label("断开 iPhone 与车机连接，停止固定入口 VPN，停止所有后台服务，清理相关内容并退出应用。",15,MUTED))
             val exitButton=button("中止服务并退出",false,R.drawable.ic_media_stop){promptStopServicesAndExit()}
             exitButton.setTextColor(android.graphics.Color.parseColor("#F2B8B5"))
             exitButton.strokeColor=android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#B3261E"))
@@ -185,12 +185,12 @@ class DiPlayActivity : AppCompatActivity() {
         if(com.zeekr.bridge.NetworkAccessSettings.asked(this))return false
         requestedBorrow=false;vpnRequestPending=true;com.zeekr.bridge.NetworkAccessSettings.markAsked(this);vpnConsent.launch(consent);return true
     }
-    private fun requestVpn(borrow:Boolean=true){if(vpnRequestPending)return
+    private fun requestVpn(borrow:Boolean=false){if(vpnRequestPending||borrow&&!com.krplay.protocol.NetworkFeatures.BORROWING_ENABLED)return
         if(!borrow&&!AirPlayPersistence.loadWirelessEnabled(this)){toast("USB 连接使用独立 VPN；请使用自动查找或切换到系统热点后启用固定入口");return}
         requestedBorrow=borrow;val consent=android.net.VpnService.prepare(this)
         if(consent==null)startVpn(borrow)else{vpnRequestPending=true;com.zeekr.bridge.NetworkAccessSettings.markAsked(this);vpnConsent.launch(consent)}
     }
-    private fun startVpn(borrow:Boolean=true){startForegroundService(Intent(this,com.zeekr.bridge.BorrowVpnService::class.java).apply{if(!borrow)action="access"})}
+    private fun startVpn(borrow:Boolean=false){startForegroundService(Intent(this,com.zeekr.bridge.BorrowVpnService::class.java).apply{if(!borrow)action="access"})}
     private fun home(content:LinearLayout){
         content.addView(label("连接 iPhone",28,TEXT,true));content.addView(label("蓝牙完成无线握手，iPhone 随后连接本设备的热点接收 CarPlay。Wi-Fi 上网与热点可并发的设备不需要先断开 Wi-Fi。",16,MUTED));content.addView(space(24))
         ui.card(content,"连接状态",R.drawable.ic_server_phone){body->status=label("",20,ACCENT,true);body.addView(status);details=label("",15,WARNING).apply{setTextIsSelectable(true)};body.addView(details);body.addView(button("查看连接详情",false){MaterialAlertDialogBuilder(this).setTitle("连接诊断").setMessage(ConnectionDiagnostics.report()).setPositiveButton("关闭",null).show()},matchButton(12))

@@ -23,7 +23,8 @@ class BorrowVpnService:VpnService() {
     }
     override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int {
         if(intent?.action=="stop"){stopSelf();return START_NOT_STICKY}
-        val nextBorrowing=intent?.action!="access"
+        // Old launch intents also fall back to fixed-entry-only operation.
+        val nextBorrowing=com.krplay.protocol.NetworkFeatures.BORROWING_ENABLED && intent?.action!="access"
         if(tun!=null&&borrowing==nextBorrowing)return START_NOT_STICKY
         // Android has one active VPN. Reconfigure this owner without starting a second service.
         handler.removeCallbacks(monitor);runCatching{TProxyService.TProxyStopService()};runCatching{tun?.close()};tun=null;anchor.close();active=false;accessActive=false

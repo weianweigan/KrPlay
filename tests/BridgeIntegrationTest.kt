@@ -38,6 +38,29 @@ fun main(){
             check(paused.slowDisconnects.get()==0L)
         }
     } finally {paused.stop()}
+    // Reproduce the freeze: the first request has no effect and the source sends no
+    // further frames. A waiting stream must retry without requiring a TCP reconnect.
+    val retryRequests=AtomicInteger();val retry=RawTcpNaluServer(19086){retryRequests.incrementAndGet()}
+    retry.start();retry.pushVideoNalu(false,0,config,0,config.size)
+    try {
+        Socket("127.0.0.1",19086).use { s ->
+            s.soTimeout=3000;val input=DataInputStream(s.getInputStream())
+            check(packet(input).first.type==4);check(packet(input).first.type==2)
+            val deadline=System.nanoTime()+3_000_000_000L
+            while(retryRequests.get()<2 && System.nanoTime()<deadline)Thread.sleep(10)
+            check(retryRequests.get()>=2){"An ignored/coalesced keyframe request must not freeze a silent stream"}
+            check(retryRequests.get()<=3){"Waiting for a keyframe must not create a request storm"}
+            check(retry.waitingForKeyFrame)
+            retry.pushVideoNalu(false,30,key,0,key.size)
+            check(packet(input).first.type==2);check(packet(input).first.pts==30L)
+            check(!retry.waitingForKeyFrame)
+            val count=retryRequests.get();Thread.sleep(1100)
+            check(retryRequests.get()==count){"Stop retries after a keyframe arrives"}
+            val delta=byteArrayOf(0,0,1,0x41,3)
+            retry.pushVideoNalu(false,31,delta,0,delta.size);check(packet(input).first.pts==31L)
+            check(retry.sendFailures.get()==0L&&retry.slowDisconnects.get()==0L)
+        }
+    } finally {retry.stop()}
     val probe=com.zeekr.bridge.LinkProbeServer(19084);probe.start()
     Socket("127.0.0.1",19084).use{s->s.soTimeout=2000;val out=DataOutputStream(s.getOutputStream());val input=DataInputStream(s.getInputStream())
         out.writeByte(4);out.flush();check(com.krplay.protocol.Discovery.verify(input))
