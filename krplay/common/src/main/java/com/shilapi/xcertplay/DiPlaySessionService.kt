@@ -117,7 +117,7 @@ class DiPlaySessionService : Service() {
         val intent =
             Intent(this, DiPlaySessionService::class.java)
                 .setAction(ACTION_MEDIA)
-                .setData(Uri.parse("wheelplay://media/${media.commandGeneration}/${command.name}"))
+                .setData(Uri.parse("krplay://media/${media.commandGeneration}/${command.name}"))
                 .putExtra(EXTRA_COMMAND, command.name)
                 .putExtra(EXTRA_GENERATION, media.commandGeneration)
         val pending =

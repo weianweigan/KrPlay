@@ -22,7 +22,7 @@ final class NaluStreamPlayer implements AutoCloseable {
     private final VideoPolicy.KeyframeRequests keyframeRequests=new VideoPolicy.KeyframeRequests();
     private final MediaCodec.BufferInfo info=new MediaCodec.BufferInfo();
     private static final class Packet {final byte[] bytes=new byte[Wire.MAX_FRAME];int type,n,connection,recovery;long pts,received;}
-    private final ArrayBlockingQueue<Packet> free=new ArrayBlockingQueue<>(6),queue=new ArrayBlockingQueue<>(4);
+    private final ArrayBlockingQueue<Packet> free=new ArrayBlockingQueue<>(14),queue=new ArrayBlockingQueue<>(12);
     private final Map<Long,Timing> pending=new ConcurrentHashMap<>();
     private static final class Timing {long ingress,send,receive,submit;}
     private HandlerThread renderThread;
@@ -30,25 +30,31 @@ final class NaluStreamPlayer implements AutoCloseable {
     final AtomicLong keyframeRequestCount=new AtomicLong(),codecStalls=new AtomicLong();
     private volatile long lastVideoReceiveNs,lastRenderNs,connectedAtNs;
     volatile String lastRecoveryReason="无";
+    volatile String decoderTuning="等待配置";
     volatile String codec="等待硬解码器";volatile double bridgeMs=Double.NaN,decodeMs=Double.NaN,transferMs=Double.NaN,serverQueueMs=Double.NaN;
-    volatile double decodeReadyMs=Double.NaN,bridgeReadyMs=Double.NaN;volatile int queueDepth;volatile double renderTimestampDeltaMs=Double.NaN;private long lastPts;
-    NaluStreamPlayer(String h,Runnable r,Consumer<String> s,Size z,PerformanceStats c){host=h;idr=r;status=s;size=z;clock=c;for(int i=0;i<6;i++)free.offer(new Packet());}
+    volatile double decodeReadyMs=Double.NaN,bridgeReadyMs=Double.NaN;volatile int queueDepth;volatile double renderTimestampDeltaMs=Double.NaN;private long lastPts,lastCodecProgressNs;
+    final AtomicLong catchupFrames=new AtomicLong(),decoderResets=new AtomicLong(),inputWaits=new AtomicLong(),nonReferenceDrops=new AtomicLong();
+    NaluStreamPlayer(String h,Runnable r,Consumer<String> s,Size z,PerformanceStats c){host=h;idr=r;status=s;size=z;clock=c;for(int i=0;i<14;i++)free.offer(new Packet());}
     void surface(Surface s){if(surface==s)return;surface=s;surfaceEpoch++;Wire.close(socket);}
     void start(){if(running)return;running=true;renderThread=new HandlerThread("KrPlay-Render-Timestamps");renderThread.start();codecThread=new Thread(this::decodeLoop,"KrPlay-Codec");codecThread.start();reader=new Thread(this::loop,"KrPlay-Video-Read");reader.start();}
     private void loop(){android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DISPLAY);while(running){Socket s=new Socket();try{
-        LocalTransport.bind(s);Wire.socket(s);s.connect(new InetSocketAddress(host,8081),1500);connectedAtNs=System.nanoTime();socket=s;s.setSoTimeout(1000);int generation=++connectionEpoch;requestKeyFrame();
+        LocalTransport.bind(s);Wire.videoSocket(s);s.connect(new InetSocketAddress(host,8081),1500);com.krplay.transport.VideoSocketOptions.configure(s);connectedAtNs=System.nanoTime();socket=s;s.setSoTimeout(1000);int generation=++connectionEpoch;requestKeyFrame();
         int recoveryGeneration=0;networkWaitingForKey=true;
         DataInputStream in=new DataInputStream(new BufferedInputStream(s.getInputStream(),65536));
         while(running){int type;try{type=in.readUnsignedByte();}catch(SocketTimeoutException idle){if(networkWaitingForKey)requestKeyFrame();continue;}s.setSoTimeout(3000);long pts=in.readLong();int n=in.readInt();Wire.validateHeader(type,pts,n);
             Packet p=free.take();
             boolean handed=false;try{p.type=type;p.pts=pts;p.n=n;p.connection=generation;p.recovery=recoveryGeneration;in.readFully(p.bytes,0,n);s.setSoTimeout(1000);p.received=System.nanoTime();receivedBytes.addAndGet(n+13L);
-                boolean video=type==0||type==1||type==20||type==21;
+                boolean video=VideoPolicy.videoPacket(type);
                 boolean key=false;if(video){lastVideoReceiveNs=p.received;receivedFrames.incrementAndGet();int offset=type==20||type==21?16:0;key=randomAccess(type==1||type==21,p.bytes,offset,n-offset);}
                 if(video&&networkWaitingForKey&&!key){requestKeyFrame();continue;}
                 // Metadata must survive congestion. Dropping a frame invalidates subsequent
                 // references, but does not invalidate the TCP connection or cached codec data.
                 if(video){
-                    if(!queue.offer(p)){overflows.incrementAndGet();recoveryGeneration++;networkWaitingForKey=true;lastRecoveryReason="客户端视频队列已满";requestKeyFrame();continue;}
+                    if(!queue.offer(p)){
+                        int offset=type==20?16:0;
+                        if((type==0||type==20)&&Wire.discardableAvc(p.bytes,offset,n-offset)){nonReferenceDrops.incrementAndGet();continue;}
+                        if(!queue.offer(p,250,TimeUnit.MILLISECONDS)){overflows.incrementAndGet();recoveryGeneration++;networkWaitingForKey=true;lastRecoveryReason="客户端视频队列持续积压超过 250ms";requestKeyFrame();continue;}
+                    }
                     if(key)networkWaitingForKey=false;
                 }else queue.put(p);
                 handed=true;queueDepth=queue.size();
@@ -58,7 +64,7 @@ final class NaluStreamPlayer implements AutoCloseable {
     private void decodeLoop(){android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DISPLAY);
         while(running){Packet p=null;try{drain();p=queue.poll(4,TimeUnit.MILLISECONDS);if(p==null){if(waitKey&&csd!=null&&surface!=null&&surface.isValid())requestKeyFrame();continue;}queueDepth=queue.size();
             if(connection!=p.connection){reset();csd=null;mime="";connection=p.connection;recovery=p.recovery;codecRetryAfterNs=0;}
-            if(recovery!=p.recovery){reset();recovery=p.recovery;}
+            if(recovery!=p.recovery){waitKey=true;recovery=p.recovery;}
             if(p.type==4){int w=((p.bytes[0]&255)<<8)|(p.bytes[1]&255),h=((p.bytes[2]&255)<<8)|(p.bytes[3]&255);if(w<320||h<240||w>4096||h>4096)throw new IOException("Invalid resolution");if(w!=width||h!=height){width=w;height=h;reset();csd=null;}size.changed(w,h);}
             else if(p.type!=16&&p.n>0){boolean timed=p.type==20||p.type==21;String m=(p.type==1||p.type==3||p.type==21)?"video/hevc":"video/avc";boolean config=p.type==2||p.type==3;
                 if(!m.equals(mime)){reset();csd=null;mime=m;}
@@ -68,18 +74,28 @@ final class NaluStreamPlayer implements AutoCloseable {
                 if(epoch!=surfaceEpoch)reset();
                 if(waitKey&&!key){requestKeyFrame();continue;}
                 if(decoder==null){if(System.nanoTime()<codecRetryAfterNs){requestKeyFrame();continue;}create(m);}
-                int idx=decoder.dequeueInputBuffer(0);long deadline=System.nanoTime()+20_000_000L;while(idx<0&&System.nanoTime()<deadline){drain();idx=decoder.dequeueInputBuffer(1000);}
-                if(idx<0){reset();lastRecoveryReason="解码器输入缓冲等待超过 20ms";codecStalls.incrementAndGet();requestKeyFrame();overflows.incrementAndGet();continue;}
+                int idx=decoder.dequeueInputBuffer(0),attempts=0;
+                long started=System.nanoTime();lastCodecProgressNs=started;boolean warned=false;
+                while(idx<0 && running){
+                    drain();idx=decoder.dequeueInputBuffer(1000);attempts++;
+                    long now=System.nanoTime();
+                    if(!warned && now-started>=VideoPolicy.INPUT_WARN_NS){inputWaits.incrementAndGet();warned=true;}
+                    if(idx<0 && VideoPolicy.inputStalled(now,lastCodecProgressNs,attempts))break;
+                    if(epoch!=surfaceEpoch || p.connection!=connectionEpoch)break;
+                }
+                if(!running)break;
+                if(epoch!=surfaceEpoch || p.connection!=connectionEpoch){reset();continue;}
+                if(idx<0){reset();lastRecoveryReason="解码器持续无进展超过 750ms";codecStalls.incrementAndGet();requestKeyFrame();continue;}
                 ByteBuffer b=decoder.getInputBuffer(idx);if(b==null||b.capacity()<n)throw new IOException("Decoder input too small");b.clear();b.put(p.bytes,off,n);
                 long now=System.nanoTime(),pts=Math.max(now/1000,lastPts+1);lastPts=pts;
                 if(pending.size()>64)pending.clear();Timing t=new Timing();t.submit=now;t.receive=p.received;if(timed){ByteBuffer v=ByteBuffer.wrap(p.bytes,0,16);t.ingress=v.getLong();t.send=v.getLong();}pending.put(pts,t);
-                decoder.queueInputBuffer(idx,0,n,pts,0);waitKey=false;drain();
+                decoder.queueInputBuffer(idx,0,n,pts,0);lastCodecProgressNs=now;waitKey=false;drain();
             }
         }catch(InterruptedException e){break;}catch(Exception e){lastRecoveryReason=failure(e);android.util.Log.w("KrPlay-Video","Codec recovery: "+e.getClass().getSimpleName()+" "+e.getMessage());reset();codecRetryAfterNs=System.nanoTime()+500_000_000L;requestKeyFrame();status.accept("视频恢复 · "+failure(e));}finally{if(p!=null)free.offer(p);}}
         reset();Packet p;while((p=queue.poll())!=null)free.offer(p);
     }
     private boolean randomAccess(boolean hevc,byte[] data,int offset,int n){for(int i=offset;i+3<offset+n;i++)if(data[i]==0&&data[i+1]==0){int k=data[i+2]==1?3:data[i+2]==0&&data[i+3]==1?4:0;if(k>0&&i+k<offset+n&&Wire.key(hevc,hevc?(data[i+k]>>1)&63:data[i+k]&31))return true;}return false;}
-    private void requestKeyFrame(){if(keyframeRequests.acquire(System.nanoTime())){keyframeRequestCount.incrementAndGet();idr.run();}}
+    private void requestKeyFrame(){if(keyframeRequests.acquire(System.nanoTime(),clock.rttMs()>100)){keyframeRequestCount.incrementAndGet();idr.run();}}
     boolean waitingForKeyFrame(){return waitKey||networkWaitingForKey;}
     long videoIdleMs(){return lastVideoReceiveNs==0?-1:(System.nanoTime()-lastVideoReceiveNs)/1_000_000L;}
     long renderIdleMs(){return lastRenderNs==0?-1:(System.nanoTime()-lastRenderNs)/1_000_000L;}
@@ -94,15 +110,48 @@ final class NaluStreamPlayer implements AutoCloseable {
     }
     private static String failure(Exception e){String message=e.getMessage();return e.getClass().getSimpleName()+(message==null?"":" · "+message);}
     private void create(String m)throws IOException {
-        MediaFormat f=MediaFormat.createVideoFormat(m,width,height);f.setInteger(MediaFormat.KEY_PRIORITY,0);f.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE,Wire.MAX_FRAME);
-        if(Build.VERSION.SDK_INT>=30)f.setInteger(MediaFormat.KEY_LOW_LATENCY,1);f.setInteger("vendor.qti-ext-dec-low-latency.enable",1);
+        try{create(m,true);decoderTuning="低延迟 / operating-rate 120 已请求";}
+        catch(RuntimeException unsupported){
+            android.util.Log.w("KrPlay-Video","Optional decoder tuning rejected; retrying baseline",unsupported);
+            create(m,false);decoderTuning="可选参数被拒绝，使用兼容配置";
+        }
+    }
+    private void create(String m,boolean tune)throws IOException {
+        MediaFormat f=MediaFormat.createVideoFormat(m,width,height);f.setInteger(MediaFormat.KEY_PRIORITY,0);if(tune)f.setInteger(MediaFormat.KEY_OPERATING_RATE,120);f.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE,Wire.MAX_FRAME);
+        if(tune&&Build.VERSION.SDK_INT>=30)f.setInteger(MediaFormat.KEY_LOW_LATENCY,1);
         List<byte[]> sets=Wire.nals(csd,0,csd.length);if(m.equals("video/avc")){for(byte[] set:sets){int t=Wire.nalType(false,set);if(t==7||t==8)f.setByteBuffer(t==7?"csd-0":"csd-1",ByteBuffer.wrap(Wire.annex(Collections.singletonList(set))));}}else f.setByteBuffer("csd-0",ByteBuffer.wrap(csd));
         String name=null;for(MediaCodecInfo c:new MediaCodecList(MediaCodecList.REGULAR_CODECS).getCodecInfos()){if(c.isEncoder()||!c.isHardwareAccelerated())continue;for(String type:c.getSupportedTypes())if(type.equals(m)){name=c.getName();break;}if(name!=null)break;}if(name==null)throw new IOException("No hardware decoder for "+m);
-        MediaCodec c=MediaCodec.createByCodecName(name);try{c.configure(f,surface,null,0);c.setOnFrameRenderedListener((owner,pts,nano)->{if(owner!=decoder)return;lastRenderNs=System.nanoTime();renderedFrames.incrementAndGet();Timing t=pending.remove(pts);if(t!=null){renderTimestampDeltaMs=(nano-t.submit)/1e6;long callback=System.nanoTime();long rendered=VideoPolicy.renderTime(t.submit,nano,callback);decodeMs=(rendered-t.submit)/1e6;bridgeMs=clock.bridgeMs(t.ingress,rendered);clock.latency(bridgeMs);if(t.send>0&&clock.synced()){transferMs=Math.max(0,(t.receive-(t.send-clock.offsetNs()))/1e6);serverQueueMs=t.ingress>0?Math.max(0,(t.send-t.ingress)/1e6):Double.NaN;}}},new Handler(renderThread.getLooper()));
+        MediaCodec c=MediaCodec.createByCodecName(name);
+        try{if(tune&&(name.startsWith("c2.qti.")||name.startsWith("OMX.qcom."))){
+            f.setInteger("vendor.qti-ext-dec-low-latency.enable",1);
+            if(Build.VERSION.SDK_INT>=31 && c.getSupportedVendorParameters().contains("vendor.qti-ext-dec-picture-order.enable"))
+                f.setInteger("vendor.qti-ext-dec-picture-order.enable",1);
+        }
+        c.configure(f,surface,null,0);c.setOnFrameRenderedListener((owner,pts,nano)->{if(owner!=decoder)return;lastRenderNs=System.nanoTime();renderedFrames.incrementAndGet();Timing t=pending.remove(pts);if(t!=null){renderTimestampDeltaMs=(nano-t.submit)/1e6;long callback=System.nanoTime();long rendered=VideoPolicy.renderTime(t.submit,nano,callback);decodeMs=(rendered-t.submit)/1e6;bridgeMs=clock.bridgeMs(t.ingress,rendered);clock.latency(bridgeMs);if(t.send>0&&clock.synced()){transferMs=Math.max(0,(t.receive-(t.send-clock.offsetNs()))/1e6);serverQueueMs=t.ingress>0?Math.max(0,(t.send-t.ingress)/1e6):Double.NaN;}}},new Handler(renderThread.getLooper()));
             c.start();decoder=c;epoch=surfaceEpoch;codec=name;status.accept("已连接 · "+width+" × "+height+" · "+name);
         }catch(RuntimeException e){c.release();throw e;}
     }
-    private void drain(){if(decoder==null)return;int i;while((i=decoder.dequeueOutputBuffer(info,0))>=0){Timing t=pending.get(info.presentationTimeUs);if(t!=null){long now=System.nanoTime();decodeReadyMs=(now-t.submit)/1e6;bridgeReadyMs=clock.bridgeMs(t.ingress,now);}decoder.releaseOutputBuffer(i,true);}}
-    private void reset(){waitKey=true;pending.clear();if(decoder!=null){MediaCodec d=decoder;decoder=null;try{d.stop();}catch(RuntimeException ignored){}try{d.release();}catch(RuntimeException ignored){}}}
+    private boolean queuedVideo(){for(Packet p:queue)if(VideoPolicy.videoPacket(p.type))return true;return false;}
+    private void releaseOutput(int index,long pts,boolean render){
+        if(!render){pending.remove(pts);catchupFrames.incrementAndGet();}
+        decoder.releaseOutputBuffer(index,render);
+    }
+    private void drain(){
+        if(decoder==null)return;
+        int latest=-1;long latestPts=0;
+        // Feed every reference frame, but release obsolete decoded outputs without
+        // presenting them. Always present the last output once backlog is consumed.
+        for(int count=0;count<64;count++){
+            int i=decoder.dequeueOutputBuffer(info,0);
+            if(i==MediaCodec.INFO_OUTPUT_FORMAT_CHANGED||i==MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED)continue;
+            if(i<0)break;
+            lastCodecProgressNs=System.nanoTime();
+            if(latest>=0)releaseOutput(latest,latestPts,false);
+            latest=i;latestPts=info.presentationTimeUs;
+            Timing t=pending.get(latestPts);if(t!=null){decodeReadyMs=(lastCodecProgressNs-t.submit)/1e6;bridgeReadyMs=clock.bridgeMs(t.ingress,lastCodecProgressNs);}
+        }
+        if(latest>=0)releaseOutput(latest,latestPts,!queuedVideo());
+    }
+    private void reset(){waitKey=true;pending.clear();if(decoder!=null){MediaCodec d=decoder;decoder=null;decoderResets.incrementAndGet();try{d.stop();}catch(RuntimeException ignored){}try{d.release();}catch(RuntimeException ignored){}}}
     public void close(){running=false;Wire.close(socket);if(reader!=null)reader.interrupt();if(codecThread!=null)codecThread.interrupt();if(renderThread!=null)renderThread.quitSafely();}
 }

@@ -33,11 +33,11 @@ class DiagnosticExportStoreTest {
     }
 
     @Test fun android10SavesUtf8ReportToDownloadsAndPublishesAfterClosingIt() {
-        val report = "WheelPlay · diagnostic report\nVideo: H.264\n"
-        val uri = DiagnosticExportStore.saveToDownloads(resolver, "WheelPlay-test.txt", report)
+        val report = "KrPlay · diagnostic report\nVideo: H.264\n"
+        val uri = DiagnosticExportStore.saveToDownloads(resolver, "KrPlay-test.txt", report)
         assertEquals(provider.uri, uri)
         assertEquals(report, provider.file.readText())
-        assertEquals("Download/WheelPlay", provider.insertValues!!.getAsString(MediaStore.Downloads.RELATIVE_PATH))
+        assertEquals("Download/KrPlay", provider.insertValues!!.getAsString(MediaStore.Downloads.RELATIVE_PATH))
         assertEquals("text/plain", provider.insertValues!!.getAsString(MediaStore.Downloads.MIME_TYPE))
         assertEquals(1, provider.insertValues!!.getAsInteger(MediaStore.Downloads.IS_PENDING))
         assertEquals(0, provider.publishValues!!.getAsInteger(MediaStore.Downloads.IS_PENDING))

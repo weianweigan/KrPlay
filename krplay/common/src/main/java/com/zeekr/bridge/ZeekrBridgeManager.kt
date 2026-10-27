@@ -21,7 +21,7 @@ object ZeekrBridgeManager {
     @Volatile private var mode=0
     private var listener:ServerSocket?=null
     @Volatile private var control:Socket?=null
-    private val stream=RawTcpNaluServer { requestIdr() }
+    private val stream=RawTcpNaluServer(configureSocket={com.krplay.transport.VideoSocketOptions.configure(it)}) { emitIdr() }
     private val hub=ReverseSocks5Hub()
     private val probe=LinkProbeServer()
     private var box:BoxVirtualDisplayEngine?=null
@@ -87,7 +87,7 @@ object ZeekrBridgeManager {
             .put("iphoneStage",com.shilapi.xcertplay.ConnectionDiagnostics.stage).put("iphoneError",com.shilapi.xcertplay.ConnectionDiagnostics.lastFailure?:"")
             .put("error",error).put("vpnConsentRequired",pendingVpn).put("txBytes",stats[1]).put("rxBytes",stats[3]).put("test",TunnelDiagnostics.latest)
         state.put("fixedEntry",BorrowVpnService.accessActive).put("fixedEntryMessage",BorrowVpnService.accessMessage)
-        state.put("audio",ClientAudioRoute.snapshot()).put("stream",JSONObject().put("connected",stream.connected).put("slowDisconnects",stream.slowDisconnects.get()).put("sourceResets",stream.sourceResets.get()).put("queueRecoveries",stream.queueRecoveries.get()).put("sendFailures",stream.sendFailures.get()).put("waitingKeyFrame",stream.waitingForKeyFrame).put("keyframeRequests",stream.keyframeRequests.get()))
+        state.put("audio",ClientAudioRoute.snapshot()).put("stream",JSONObject().put("connected",stream.connected).put("slowDisconnects",stream.slowDisconnects.get()).put("sourceResets",stream.sourceResets.get()).put("queueRecoveries",stream.queueRecoveries.get()).put("sendFailures",stream.sendFailures.get()).put("lastSendFailure",stream.lastSendFailure).put("queueDepth",stream.queueDepth).put("staleFrames",stream.staleFrames.get()).put("nonReferenceDrops",stream.nonReferenceDrops.get()).put("lastWriteMs",stream.lastWriteMs).put("maxFrameBytes",stream.maxFrameBytes.get()).put("waitingKeyFrame",stream.waitingForKeyFrame).put("keyframeRequests",stream.keyframeRequests.get()))
         if(probeId!=null)state.put("probe",JSONObject().put("t0",probeId).put("t1",receivedNs).put("t2",System.nanoTime()))
         val bytes=state.toString().toByteArray(Charsets.UTF_8);check(bytes.size<=16384)
         synchronized(statusLock){val out=DataOutputStream(socket.getOutputStream());out.writeByte(128);out.writeShort(bytes.size);out.write(bytes);out.flush()}
@@ -101,7 +101,8 @@ object ZeekrBridgeManager {
         for(i in contacts.indices)if(t.action==3 || t.action==1&&contacts[i]?.id==changed)contacts[i]=null
     }
     private fun cancelTouch(){CarPlayBackgroundSession.snapshot()?.controller?.sendTouch(emptyList());contacts.fill(null);if(mode==1)box?.touch(Wire.Touch(3,intArrayOf(0),floatArrayOf(0f),floatArrayOf(0f)))}
-    fun requestIdr(){
+    fun requestIdr(){stream.requestKeyFrame()}
+    private fun emitIdr(){
         if(mode==1){if(keyframeRequests.acquire(System.nanoTime()))box?.requestKeyFrame()}
         else recovery[carType]?.let{if(keyframeRequests.acquire(System.nanoTime()))runCatching{it()}}
     }

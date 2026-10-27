@@ -2,7 +2,10 @@ package com.zeekr.bridge
 
 import com.krplay.protocol.Wire
 import java.io.DataOutputStream
-import java.io.BufferedOutputStream
+import java.nio.ByteBuffer
+import java.nio.channels.ServerSocketChannel
+import java.nio.channels.Selector
+import java.nio.channels.SelectionKey
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
@@ -11,17 +14,26 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 /** One owner per stream; bounded preallocated packets, no producer waits on socket I/O. */
-class RawTcpNaluServer(private val port: Int = 8081, private val requestIdr: () -> Unit = {}) {
-    private class Packet { val bytes = ByteArray(Wire.MAX_FRAME); var type=0; var pts=0L; var size=0;var receivedNs=0L }
-    private val free = ArrayBlockingQueue<Packet>(8).apply { repeat(8) { offer(Packet()) } }
+class RawTcpNaluServer(private val port: Int = 8081, private val configureSocket:(Socket)->Unit = { Wire.videoSocket(it) }, private val requestIdr: () -> Unit = {}) {
+    private class Packet { val bytes = ByteArray(Wire.MAX_FRAME); var type=0; var pts=0L; var size=0;var receivedNs=0L;var queuedNs=0L }
+    private val free = ArrayBlockingQueue<Packet>(16).apply { repeat(16) { offer(Packet()) } }
     val slowDisconnects=java.util.concurrent.atomic.AtomicLong()
     val sourceResets=java.util.concurrent.atomic.AtomicLong()
     val queueRecoveries=java.util.concurrent.atomic.AtomicLong()
     val sendFailures=java.util.concurrent.atomic.AtomicLong()
+    val nonReferenceDrops=java.util.concurrent.atomic.AtomicLong()
+    val staleFrames=java.util.concurrent.atomic.AtomicLong()
+    val maxFrameBytes=java.util.concurrent.atomic.AtomicLong()
+    @Volatile var lastWriteMs=0.0;private set
+    @Volatile var lastSendFailure="";private set
+    val queueDepth get()=client?.queue?.size?:0
     val keyframeRequests=java.util.concurrent.atomic.AtomicLong()
     private class Client(val socket: Socket) {
-        val queue=ArrayBlockingQueue<Packet>(4)
+        val queue=ArrayBlockingQueue<Packet>(12)
         @Volatile var writingSince=0L
+        @Volatile var progressNs=0L
+        @Volatile var requestPending=false
+        @Volatile var lastKeySentNs=0L
         @Volatile var waitingKey=true
         val requests=com.krplay.protocol.VideoPolicy.KeyframeRequests()
     }
@@ -40,20 +52,21 @@ class RawTcpNaluServer(private val port: Int = 8081, private val requestIdr: () 
 
     @Synchronized fun start() {
         if(running)return
-        val listener=ServerSocket().apply { reuseAddress=true; bind(InetSocketAddress(port)) }
+        val listener=ServerSocketChannel.open().socket().apply { reuseAddress=true; bind(InetSocketAddress(port)) }
         server=listener;running=true
         watchdog=Executors.newSingleThreadScheduledExecutor().also { executor ->
             // Large IDRs and brief Wi-Fi stalls can take more than 120ms. Queue recovery
             // already bounds buffered video; only abandon a persistently blocked writer.
             executor.scheduleAtFixedRate({client?.let {
-                if(it.writingSince!=0L && System.nanoTime()-it.writingSince>2_000_000_000L){slowDisconnects.incrementAndGet();it.writingSince=0;Wire.close(it.socket)}
+                if(it.writingSince!=0L && System.nanoTime()-it.progressNs>2_000_000_000L){slowDisconnects.incrementAndGet();it.writingSince=0;Wire.close(it.socket)}
                 // An upstream request may be coalesced or lost. Retry even when a static
                 // source sends no more slices: otherwise waitingKey can persist forever.
-                if(it.waitingKey && cachedCsd!=null)requestKeyFrame(it)
+                if(it.waitingKey && cachedCsd!=null)it.requestPending=true
+                dispatchKeyFrame(it)
             }},100,100,TimeUnit.MILLISECONDS)
         }
         Thread({while(running) { val socket=try{listener.accept()}catch(_:Exception){break}
-            try { Wire.socket(socket); val c=Client(socket)
+            try { configureSocket(socket); val c=Client(socket)
                 synchronized(this) {
                     dropClient(); client=c
                     enqueue(c,4,0,byteArrayOf((width shr 8).toByte(),width.toByte(),(height shr 8).toByte(),height.toByte()))
@@ -88,23 +101,43 @@ class RawTcpNaluServer(private val port: Int = 8081, private val requestIdr: () 
             i=nalStart+1
         }
         if(changed){cachedIdr=null;cachedCsd=Wire.annex(configs.values.toList());client?.let { c ->
-            while(true){val p=c.queue.poll()?:break;free.offer(p)};c.waitingKey=true;cachedCsd?.let{enqueue(c,if(hevc)3 else 2,0,it)}
+            clearQueued(c);c.waitingKey=true;cachedCsd?.let{enqueue(c,if(hevc)3 else 2,0,it)}
         }}
         if(!hasSlice)return
+        maxFrameBytes.updateAndGet{maxOf(it,length.toLong())}
         if(key)cachedIdr=src.copyOfRange(offset,end)
         val c=client?:return
         if(c.waitingKey&&!key){requestKeyFrame(c);return}
-        if(c.queue.remainingCapacity()<(if(key)2 else 1) || free.size<(if(key)2 else 1)){
+        val oldest=c.queue.peek()
+        if(!hevc && (oldest==null || System.nanoTime()-oldest.queuedNs<=250_000_000L) &&
+            (c.queue.remainingCapacity()==0||free.isEmpty()) && Wire.discardableAvc(src,offset,length)){
+            nonReferenceDrops.incrementAndGet();return
+        }
+        if((oldest!=null && System.nanoTime()-oldest.queuedNs>250_000_000L) ||
+            c.queue.remainingCapacity()<(if(key)2 else 1) || free.size<(if(key)2 else 1)){
             queueRecoveries.incrementAndGet()
-            while(true){val p=c.queue.poll()?:break;free.offer(p)};c.waitingKey=true
+            clearQueued(c);c.waitingKey=true
             if(!key){requestKeyFrame(c);return}
         }
         if(key){cachedCsd?.let { enqueue(c,if(hevc)3 else 2,0,it) };c.waitingKey=false}
         enqueue(c,if(hevc)1 else 0,pts,src,offset,length,receivedNs)
     }
-    private fun requestKeyFrame(c:Client){
-        if(running && client===c && !c.socket.isClosed && c.requests.acquire(System.nanoTime())){
-            keyframeRequests.incrementAndGet();runCatching{requestIdr()}
+    private fun clearQueued(c:Client){
+        var resolution=false
+        while(true){val p=c.queue.poll()?:break;if(p.type==4)resolution=true; if(p.type==0||p.type==1)staleFrames.incrementAndGet();free.offer(p)}
+        if(resolution)enqueue(c,4,0,byteArrayOf((width shr 8).toByte(),width.toByte(),(height shr 8).toByte(),height.toByte()))
+    }
+    /** All control, overflow and watchdog requests share this congestion gate. */
+    fun requestKeyFrame(){client?.let{requestKeyFrame(it)}}
+    private fun requestKeyFrame(c:Client){c.requestPending=true;dispatchKeyFrame(c)}
+    private fun dispatchKeyFrame(c:Client){
+        val now=System.nanoTime()
+        // A partial TCP frame must finish first. Never generate more IDRs into a
+        // blocked writer; retry from the watchdog once the channel has drained.
+        if(!c.requestPending || !c.queue.isEmpty() || c.writingSince!=0L) return
+        if(c.lastKeySentNs!=0L && now-c.lastKeySentNs<500_000_000L)return
+        if(running && client===c && !c.socket.isClosed && c.requests.acquire(now)){
+            c.requestPending=false;keyframeRequests.incrementAndGet();runCatching{requestIdr()}
         }
     }
     private fun startCode(b:ByteArray,i:Int,end:Int):Int = if(i+2<end && b[i]==0.toByte()&&b[i+1]==0.toByte()) when {
@@ -113,10 +146,46 @@ class RawTcpNaluServer(private val port: Int = 8081, private val requestIdr: () 
         else->0
     } else 0
     @Synchronized fun pushAudioPcm(pts:Long,src:ByteArray,offset:Int,length:Int){if(length<0||length%4!=0||length>Wire.MAX_FRAME||offset<0||offset>src.size-length)return;client?.let{enqueue(it,16,pts,src,offset,length)}}
-    private fun enqueue(c:Client,t:Int,pts:Long,b:ByteArray,o:Int=0,n:Int=b.size,receivedNs:Long=0){val p=free.poll()?:return;p.type=t;p.pts=pts;p.size=n;p.receivedNs=receivedNs;b.copyInto(p.bytes,0,o,o+n);if(!c.queue.offer(p))free.offer(p)}
-    private fun send(c:Client){try{val out=DataOutputStream(BufferedOutputStream(c.socket.getOutputStream(),65536));while(running&&!c.socket.isClosed){val p=c.queue.poll(250,TimeUnit.MILLISECONDS)?:continue
-        try{c.writingSince=System.nanoTime();if(timingEnabled&&(p.type==0||p.type==1)&&p.size<=Wire.MAX_FRAME-16){
-            out.writeByte(if(p.type==0)20 else 21);out.writeLong(p.pts);out.writeInt(p.size+16);out.writeLong(p.receivedNs);out.writeLong(System.nanoTime());out.write(p.bytes,0,p.size)
-        }else Wire.frame(out,p.type,p.pts,p.bytes,0,p.size);out.flush()}finally{c.writingSince=0;free.offer(p)}
-    }}catch(_:Exception){if(running)sendFailures.incrementAndGet()}finally{synchronized(this){if(client===c)dropClient()};Wire.close(c.socket)}}
+    private fun enqueue(c:Client,t:Int,pts:Long,b:ByteArray,o:Int=0,n:Int=b.size,receivedNs:Long=0){val p=free.poll()?:return;p.type=t;p.pts=pts;p.size=n;p.receivedNs=receivedNs;p.queuedNs=System.nanoTime();b.copyInto(p.bytes,0,o,o+n);if(!c.queue.offer(p))free.offer(p)}
+    private fun send(c:Client){
+        try {
+            val channel=c.socket.channel ?: error("Video socket requires SocketChannel")
+            channel.configureBlocking(false)
+            Selector.open().use { selector ->
+                channel.register(selector,SelectionKey.OP_WRITE)
+                fun writeFully(bytes:ByteBuffer){
+                    while(bytes.hasRemaining() && running && !c.socket.isClosed){
+                        val limit=bytes.limit();bytes.limit(minOf(limit,bytes.position()+16*1024))
+                        val written=try{channel.write(bytes)}finally{bytes.limit(limit)}
+                        if(written>0)c.progressNs=System.nanoTime()
+                        else {selector.select(5);selector.selectedKeys().clear()}
+                    }
+                    if(bytes.hasRemaining())throw java.io.EOFException("Video channel closed mid-frame")
+                }
+                while(running&&!c.socket.isClosed){
+                    val p=c.queue.poll(100,TimeUnit.MILLISECONDS)?:continue
+                    try {
+                        val now=System.nanoTime()
+                        if((p.type==0||p.type==1) && now-p.queuedNs>250_000_000L){
+                            synchronized(this){staleFrames.incrementAndGet();clearQueued(c);c.waitingKey=true;queueRecoveries.incrementAndGet()}
+                            requestKeyFrame(c);continue
+                        }
+                        c.progressNs=now;c.writingSince=now
+                        val timed=timingEnabled&&(p.type==0||p.type==1)&&p.size<=Wire.MAX_FRAME-16
+                        val header=ByteBuffer.allocate(if(timed)29 else 13)
+                        header.put((if(timed)if(p.type==0)20 else 21 else p.type).toByte())
+                        header.putLong(p.pts).putInt(p.size+if(timed)16 else 0)
+                        if(timed)header.putLong(p.receivedNs).putLong(now)
+                        header.flip();writeFully(header);writeFully(ByteBuffer.wrap(p.bytes,0,p.size))
+                        lastWriteMs=(System.nanoTime()-now)/1e6
+                        if((p.type==0||p.type==1)&&Wire.randomAccess(p.type==1,p.bytes,p.size)){
+                            c.lastKeySentNs=System.nanoTime();c.requestPending=false
+                        }
+                    }finally{c.writingSince=0;free.offer(p)}
+                    dispatchKeyFrame(c)
+                }
+            }
+        }catch(e:Exception){if(running && client===c && !c.socket.isClosed){sendFailures.incrementAndGet();lastSendFailure=e.javaClass.simpleName+": "+e.message}}
+        finally{synchronized(this){if(client===c)dropClient()};Wire.close(c.socket)}
+    }
 }

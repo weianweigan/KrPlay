@@ -12,6 +12,11 @@ public final class Wire {
         s.setSendBufferSize(512 * 1024); s.setReceiveBufferSize(512 * 1024);
         try { s.setTrafficClass(0x10); } catch (SocketException ignored) { }
     }
+    /** Best-effort CS4 marking; the AP/host may ignore it. Buffers are kernel hints. */
+    public static void videoSocket(Socket s) throws SocketException {
+        socket(s);
+        try { s.setTrafficClass(0x80); } catch (SocketException ignored) { }
+    }
     public static final class Frame {
         public final int type, size; public final long pts;
         public Frame(int t, long p, int n) { type=t; pts=p; size=n; }
@@ -64,6 +69,22 @@ public final class Wire {
         for(int i=0;i+3<size;i++)if(data[i]==0 && data[i+1]==0){int prefix=data[i+2]==1?3:(data[i+2]==0&&data[i+3]==1?4:0);
             if(prefix>0 && i+prefix<size){int type=hevc?(data[i+prefix]>>1)&63:data[i+prefix]&31;if(key(hevc,type))return true;i+=prefix;}}
         return false;
+    }
+    /** Only positively identified non-reference AVC AUs may be discarded compressed.
+     * HEVC, partitioned AVC and unknown NAL types conservatively retain references. */
+    public static boolean discardableAvc(byte[] data,int offset,int size) {
+        if(offset<0||size<0||offset>data.length-size)return false;
+        boolean slice=false;int end=offset+size;
+        for(int i=offset;i+3<end;i++)if(data[i]==0&&data[i+1]==0){
+            int prefix=data[i+2]==1?3:(i+3<end&&data[i+2]==0&&data[i+3]==1?4:0);
+            if(prefix==0)continue;if(i+prefix>=end)return false;
+            int header=data[i+prefix]&255,type=header&31;
+            if((header&0x80)!=0)return false;
+            if(type==1){if((header&0x60)!=0)return false;slice=true;}
+            else if(type!=6&&type!=9&&type!=12)return false;
+            i+=prefix;
+        }
+        return slice;
     }
     public static int nalType(boolean hevc,byte[] n){ return n.length==0?-1:hevc?(n[0]>>1)&63:n[0]&31; }
     public static boolean key(boolean hevc,int type){return hevc?type>=16 && type<=21:type==5;}

@@ -36,10 +36,8 @@ pid-file=$PIDFILE
 dhcp-leasefile=$BASE/dnsmasq.leases
 dhcp-range=192.168.50.10,192.168.50.100,255.255.255.0,12h
 dhcp-authoritative
-dhcp-option=3
-dhcp-option=6
-dhcp-option=121,100.96.0.1/32,192.168.50.1,192.168.50.0/24,192.168.50.1
-dhcp-option=249,100.96.0.1/32,192.168.50.1,192.168.50.0/24,192.168.50.1
+dhcp-option=3,192.168.50.1
+dhcp-option=6,8.8.8.8
 CONFIG
 iptables -N KRPLAY_IN 2>/dev/null || true
 iptables -F KRPLAY_IN
@@ -47,4 +45,4 @@ iptables -A KRPLAY_IN -s 192.168.50.0/24 -p tcp -m multiport --dports 7000,8081,
 iptables -A KRPLAY_IN -p tcp -m multiport --dports 7000,8081,8082,8083,8084 -j DROP
 iptables -C INPUT -i "$IFACE" -j KRPLAY_IN 2>/dev/null || iptables -I INPUT -i "$IFACE" -j KRPLAY_IN
 if ! /system/bin/dnsmasq -C "$BASE/dnsmasq.conf"; then stop_owned; exit 1; fi
-echo 'KrPlay DHCP active. Reconnect car and iPhone to renew leases; verify their default cellular routes.'
+echo 'KrPlay DHCP active. Reconnect car and iPhone to renew leases; verify their DHCP gateway and DNS.'

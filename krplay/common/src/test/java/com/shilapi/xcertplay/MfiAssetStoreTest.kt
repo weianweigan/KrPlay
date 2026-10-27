@@ -148,7 +148,7 @@ internal object SyntheticMfiIdentity {
         val pair = KeyPairGenerator.getInstance("EC").apply {
             initialize(ECGenParameterSpec("secp256r1"))
         }.generateKeyPair()
-        val name = X500Name("CN=WheelPlay synthetic import test")
+        val name = X500Name("CN=KrPlay synthetic import test")
         val certificate = JcaX509v3CertificateBuilder(name, BigInteger.ONE, Date(0),
             Date(4102444800000L), name, pair.public)
             .build(JcaContentSignerBuilder("SHA256withECDSA").build(pair.private)).encoded

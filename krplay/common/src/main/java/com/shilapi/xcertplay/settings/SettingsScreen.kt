@@ -17,12 +17,14 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shilapi.xcertplay.host.R
+import androidx.compose.foundation.isSystemInDarkTheme
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 @Composable
 internal fun SettingsTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme =
+    val isDark = isSystemInDarkTheme()
+    val colorScheme =
+        if (isDark) {
             darkColorScheme(
                 primary = Color(com.krplay.protocol.UiPalette.ACCENT),
                 onPrimary = Color(com.krplay.protocol.UiPalette.ON_ACCENT),
@@ -32,7 +34,21 @@ internal fun SettingsTheme(content: @Composable () -> Unit) {
                 onSurface = Color(com.krplay.protocol.UiPalette.TEXT),
                 onSurfaceVariant = Color(com.krplay.protocol.UiPalette.MUTED),
                 outline = Color(0xff8b9389),
-            ),
+            )
+        } else {
+            lightColorScheme(
+                primary = Color(com.krplay.protocol.UiPalette.LIGHT_ACCENT),
+                onPrimary = Color(com.krplay.protocol.UiPalette.LIGHT_ON_ACCENT),
+                background = Color(com.krplay.protocol.UiPalette.LIGHT_BACKGROUND),
+                surface = Color(com.krplay.protocol.UiPalette.LIGHT_BACKGROUND),
+                surfaceContainer = Color(com.krplay.protocol.UiPalette.LIGHT_SURFACE),
+                onSurface = Color(com.krplay.protocol.UiPalette.LIGHT_TEXT),
+                onSurfaceVariant = Color(com.krplay.protocol.UiPalette.LIGHT_MUTED),
+                outline = Color(com.krplay.protocol.UiPalette.LIGHT_BORDER),
+            )
+        }
+    MaterialTheme(
+        colorScheme = colorScheme,
         content = content,
     )
 }

@@ -2,7 +2,7 @@ plugins { id("com.android.application") version "9.1.0" }
 android {
     namespace = "com.krplay.client"
     compileSdk = 35
-    defaultConfig { applicationId = "com.krplay.client"; minSdk = 29; targetSdk = 32; versionCode = providers.environmentVariable("KRPLAY_VERSION_CODE").orNull?.toInt() ?: 4006; versionName = providers.environmentVariable("KRPLAY_RELEASE_TAG").orNull ?: "0.4.5" }
+    defaultConfig { applicationId = "com.krplay.client"; minSdk = 29; targetSdk = 32; versionCode = providers.environmentVariable("KRPLAY_VERSION_CODE").orNull?.toInt() ?: 5001; versionName = providers.environmentVariable("KRPLAY_RELEASE_TAG").orNull ?: "0.5.0" }
     val localKey = file(".signing/krplay.p12")
     if (localKey.exists()) {
         signingConfigs.getByName("debug") {
@@ -35,6 +35,7 @@ tasks.register<Copy>("exportKrPlayDebug") {
 }
 
 dependencies {
+    implementation("com.google.android.material:material:1.13.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.17")
 }

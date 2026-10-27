@@ -18,6 +18,15 @@ import com.google.android.material.textview.MaterialTextView
 
 /** Material 3 components. The shell and bottom navigation stay mounted across page changes. */
 internal class ServerUi(private val context: Context) {
+    val isDark get() = com.krplay.protocol.UiPalette.isDark(context.resources.configuration.uiMode)
+    val BG get() = com.krplay.protocol.UiPalette.background(isDark)
+    val SURFACE get() = com.krplay.protocol.UiPalette.surface(isDark)
+    val BORDER get() = com.krplay.protocol.UiPalette.border(isDark)
+    val ACCENT get() = com.krplay.protocol.UiPalette.accent(isDark)
+    val TEXT get() = com.krplay.protocol.UiPalette.text(isDark)
+    val MUTED get() = com.krplay.protocol.UiPalette.muted(isDark)
+    val WARNING get() = com.krplay.protocol.UiPalette.warning(isDark)
+
     fun dp(value: Int) = (value * context.resources.displayMetrics.density).toInt()
     private val compactWidth get() = context.resources.configuration.screenWidthDp < 360
     private val pageGutter get() = maxOf(if (compactWidth) 16 else 24,

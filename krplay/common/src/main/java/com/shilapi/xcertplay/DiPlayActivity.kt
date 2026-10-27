@@ -6,10 +6,7 @@ import com.shilapi.xcertplay.shared.R as UiR
 import com.shilapi.xcertplay.i18n.*
 
 import android.Manifest
-import com.shilapi.xcertplay.ServerUi.Companion.TEXT
-import com.shilapi.xcertplay.ServerUi.Companion.MUTED
-import com.shilapi.xcertplay.ServerUi.Companion.ACCENT
-import com.shilapi.xcertplay.ServerUi.Companion.WARNING
+
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import android.bluetooth.BluetoothManager
@@ -379,12 +376,12 @@ class DiPlayActivity : AppCompatActivity() {
     private fun space(height: Int) = View(this).apply { layoutParams = LinearLayout.LayoutParams(1, dp(height)) }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
-    companion object {
-        private val ACCENT = ServerUi.ACCENT
-        private val TEXT = ServerUi.TEXT
-        private val MUTED = ServerUi.MUTED
-        private val WARNING = ServerUi.WARNING
-    }
+    private val isDark get() = com.krplay.protocol.UiPalette.isDark(resources.configuration.uiMode)
+    private val ACCENT get() = com.krplay.protocol.UiPalette.accent(isDark)
+    private val TEXT get() = com.krplay.protocol.UiPalette.text(isDark)
+    private val MUTED get() = com.krplay.protocol.UiPalette.muted(isDark)
+    private val WARNING get() = com.krplay.protocol.UiPalette.warning(isDark)
+
     private fun carHotspotOffDialog() {
         ConnectionDiagnostics.failure("系统热点未开启，请先到系统设置开启热点");refreshStatus()
         MaterialAlertDialogBuilder(this).setTitle("请先开启系统热点")

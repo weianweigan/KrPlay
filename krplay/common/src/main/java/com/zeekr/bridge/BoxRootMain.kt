@@ -38,7 +38,14 @@ object BoxRootMain {
         val codec=MediaCodec.createByCodecName(selected.name)
         val format=MediaFormat.createVideoFormat("video/avc",w,h).apply{
             setInteger(MediaFormat.KEY_COLOR_FORMAT,MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-            setInteger(MediaFormat.KEY_BIT_RATE,10_000_000);setInteger(MediaFormat.KEY_FRAME_RATE,fps)
+            setInteger(MediaFormat.KEY_BIT_RATE,(if(w.toLong()*h<=1280L*720)4_000_000 else 8_000_000).coerceIn(caps.bitrateRange.lower,caps.bitrateRange.upper));setInteger(MediaFormat.KEY_FRAME_RATE,fps)
+            setInteger(MediaFormat.KEY_PRIORITY,0)
+            val encoderCaps=selected.getCapabilitiesForType("video/avc").encoderCapabilities
+            if(encoderCaps.isBitrateModeSupported(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR))
+                setInteger(MediaFormat.KEY_BITRATE_MODE,MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
+            if(selected.getCapabilitiesForType("video/avc").profileLevels.any{it.profile==MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline})
+                setInteger(MediaFormat.KEY_PROFILE,MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
+            if(Build.VERSION.SDK_INT>=29)setInteger(MediaFormat.KEY_MAX_B_FRAMES,0)
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL,1);setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER,1_000_000L/fps)
         }
         codec.configure(format,null,null,MediaCodec.CONFIGURE_FLAG_ENCODE)

@@ -5,14 +5,14 @@ export const REPO_NAME = 'KrPlay';
 export const GITHUB_REPO_URL = `https://github.com/${REPO_OWNER}/${REPO_NAME}`;
 export const GITHUB_RELEASES_URL = `${GITHUB_REPO_URL}/releases`;
 
-const FALLBACK_TAG = 'v0.4.5';
+const FALLBACK_TAG = 'v0.5.0';
 
 export const FALLBACK_RELEASE: ReleaseInfo = {
   tag: FALLBACK_TAG,
   name: `KrPlay ${FALLBACK_TAG}`,
-  publishedAt: '2026-10-26',
+  publishedAt: '2026-10-27',
   htmlUrl: `${GITHUB_RELEASES_URL}/tag/${FALLBACK_TAG}`,
-  body: '改善视频恢复与诊断、车机窗口适配，新增退出入口；借网功能暂时关闭。',
+  body: 'UI主题色彩与暗黑模式适配、CarPlay车机名称自定义、实时音频队列与视频追帧恢复优化。',
   assets: {
     receiverApk: {
       name: `KrPlay-${FALLBACK_TAG}.apk`,

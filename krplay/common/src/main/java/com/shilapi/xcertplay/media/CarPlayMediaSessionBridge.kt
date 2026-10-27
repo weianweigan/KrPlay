@@ -23,7 +23,7 @@ internal class CarPlayMediaSessionBridge(
 ) : AutoCloseable {
     private val main = Handler(Looper.getMainLooper())
     private val audio = context.getSystemService(AudioManager::class.java)
-    internal val session = MediaSession(context, "WheelPlay iPhone")
+    internal val session = MediaSession(context, "CarPlay iPhone")
     private val artworkWorker = Executors.newSingleThreadExecutor { Thread(it, "carplay-artwork-preview").apply { isDaemon = true } }
     private val defaultArtwork = Bitmap.createBitmap(128, 128, Bitmap.Config.ARGB_8888).also { bitmap ->
         context.applicationInfo.loadIcon(context.packageManager).apply {

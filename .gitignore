@@ -9,6 +9,7 @@
 **/node_modules/
 **/local.properties
 **/.idea/
+.vscode/
 *.iml
 *.log
 *.hprof

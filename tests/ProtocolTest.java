@@ -22,6 +22,21 @@ public final class ProtocolTest {
         check(!requests.acquire(-1_999_000_000L),"concurrent reconnect/decoder requests coalesced");
         check(!requests.acquire(-1_000_000_001L),"keyframe request cooldown retained");
         check(requests.acquire(-1_000_000_000L),"missing keyframe can be requested again after one second");
+        check(!requests.acquire(0,true),"high RTT extends retry cooldown");
+        check(requests.acquire(1_000_000_000L,true),"congested recovery still eventually retries");
+        check(!VideoPolicy.inputStalled(60_000_000L,0,60),"60ms VPU bubble must not recreate codec");
+        check(!VideoPolicy.inputStalled(900_000_000L,0,1),"one VM deschedule is not sustained codec failure");
+        check(!VideoPolicy.inputStalled(900_000_000L,850_000_000L,900),"output progress extends decoder grace");
+        check(VideoPolicy.inputStalled(900_000_000L,0,900),"persistent stuck decoder recovers");
+        RealtimeAudioQueue<Integer> audio=new RealtimeAudioQueue<>();
+        audio.offer(-1,0,0); // Mic configuration must survive a 600ms burst.
+        for(int i=0;i<30;i++)audio.offer(i,0,20_000_000L);
+        check(audio.dropped()==24,"PCM burst bounded to 120ms");
+        check(audio.poll(1).value==-1,"control survives PCM eviction");
+        for(int i=24;i<30;i++)check(audio.poll(1).value==i,"newest PCM kept in order");
+        for(int i=0;i<32;i++)check(audio.offer(i,0,0),"bounded control mailbox");
+        check(!audio.offer(33,0,0),"control overflow reported, not silently dropped");
+        audio.clear();check(audio.poll(1)==null,"session clear removes all audio");
         PerformanceStats stats=new PerformanceStats();
         for(int i=0;i<5;i++)check(stats.probe(1_000_000_000L,6_002_000_000L,6_003_000_000L,1_005_000_000L),"valid asymmetric clocks");
         check(Math.abs(stats.offsetNs()-5_000_000_000L)<2,"independent device clocks aligned");check(stats.synced()&&stats.rttMs()==4,"server processing excluded from RTT");
@@ -38,6 +53,11 @@ public final class ProtocolTest {
         try{new Wire.Touch(0,new int[]{1},new float[]{Float.NaN},new float[]{0});throw new AssertionError("NaN pointer");}catch(IllegalArgumentException expected){}
         List<byte[]> nals=Wire.nals(new byte[]{0,0,1,0x67,1,0,0,0,1,0x68,2,0,0,1,0x65,3},0,16);check(nals.size()==3,"all 3-/4-byte prefixes");check(Wire.key(false,Wire.nalType(false,nals.get(2))),"IDR after config");
         check(Wire.randomAccess(false,Wire.annex(nals),Wire.annex(nals).length),"allocation-free IDR scan");
+        check(Wire.discardableAvc(new byte[]{0,0,1,1,42},0,5),"non-reference AVC slice can shed load");
+        check(!Wire.discardableAvc(new byte[]{0,0,1,0x41,42},0,5),"reference AVC retained");
+        check(!Wire.discardableAvc(new byte[]{0,0,1,1,42,0,0,1,0x41,42},0,10),"mixed AU with reference slice retained");
+        check(!Wire.discardableAvc(new byte[]{0,0,1,0x67,42,0,0,1,1,42},0,10),"config plus slice retained");
+        check(!Wire.discardableAvc(new byte[]{0,0,1,2,42},0,5),"partitioned/unknown AVC retained");
         for(int type=16;type<=21;type++)check(Wire.key(true,type),"HEVC IRAP "+type);
         byte[] request={5,1,0,5,1,0,3,3,'a','b','c',0,80};
         check(socks(request,(h,p)->{check(h.equals("abc")&&p==80,"domain CONNECT");return new Socket();})==0,"SOCKS success");

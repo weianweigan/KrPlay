@@ -25,7 +25,7 @@ class ClientAudioRoute(context:Context,port:Int=Ports.AUDIO):RemoteAudioRoute {
     @Volatile private var input:Input?=null
     @Volatile private var micAllowed=false
     @Volatile private var failure=""
-    private val queue=ArrayBlockingQueue<ByteArray>(8)
+    private val queue=com.krplay.protocol.RealtimeAudioQueue<ByteArray>()
     private val dropped=AtomicLong();private val sent=AtomicLong();private val captured=AtomicLong()
     private val ids=java.util.concurrent.atomic.AtomicInteger()
     private var routeListener:((Boolean)->Unit)?=null
@@ -43,7 +43,9 @@ class ClientAudioRoute(context:Context,port:Int=Ports.AUDIO):RemoteAudioRoute {
             routeListener?.invoke(playbackAvailable)
             Thread({read(s,data)},"KrPlay-Audio-Read").apply{isDaemon=true;start()}
             val out=DataOutputStream(BufferedOutputStream(s.getOutputStream(),8192))
-            while(running&&peer===s&&!s.isClosed){val bytes=queue.poll(1,TimeUnit.SECONDS)?:continue;out.write(bytes);out.flush()}
+            while(running&&peer===s&&!s.isClosed){val packet=queue.poll(100)?:continue
+                if(packet.durationNs>0 && System.nanoTime()-packet.enqueuedNs>com.krplay.protocol.RealtimeAudioQueue.MAX_AGE_NS){dropped.incrementAndGet();continue}
+                out.write(packet.value);out.flush()}
         }catch(e:Exception){if(running)failure=e.javaClass.simpleName}
         finally{synchronized(this){if(peer===s){peer=null;micAllowed=false;queue.clear();input?.clear()}};Wire.close(s);routeListener?.invoke(playbackAvailable)}
     }}
@@ -53,15 +55,15 @@ class ClientAudioRoute(context:Context,port:Int=Ports.AUDIO):RemoteAudioRoute {
         2->{val id=data.readInt();val code=data.readUnsignedByte();require(code in 1..3);if(input?.id==id)failure=when(code){1->"KrPlay-Client 麦克风权限未允许";2->"KrPlay-Client 不支持协商的录音格式";else->"KrPlay-Client 麦克风读取失败"}}
         else->throw IOException("Unknown audio input")
     }}}catch(_:Exception){}finally{Wire.close(s)}}
-    private fun send(writer:(DataOutputStream)->Unit){if(peer==null)return
+    private fun send(durationNs:Long=0,writer:(DataOutputStream)->Unit){if(peer==null)return
         val b=ByteArrayOutputStream();writer(DataOutputStream(b));val bytes=b.toByteArray()
-        if(!queue.offer(bytes)){dropped.incrementAndGet();Wire.close(peer)} // reconnect/replay mic config, never lose control frames
+        if(!queue.offer(bytes,System.nanoTime(),durationNs)){dropped.incrementAndGet();Wire.close(peer)} // reconnect/replay mic config, never lose control frames
     }
     override fun output(type:Int,format:AudioFormat,pcm:ByteArray,offset:Int,length:Int):Boolean {
         if(!outputClient)return false
-        val step=AudioWire.MAX_PCM/(format.channels*2)*(format.channels*2)
+        val step=minOf(AudioWire.MAX_PCM/(format.channels*2),format.sampleRate/50)*(format.channels*2)
         var off=offset;val end=offset+length
-        while(off<end){val n=minOf(step,end-off);send{AudioWire.pcm(it,type,format.sampleRate,format.channels,pcm,off,n)};sent.addAndGet(n.toLong());off+=n}
+        while(off<end){val n=minOf(step,end-off);send(n*1_000_000_000L/(format.sampleRate*format.channels*2)){AudioWire.pcm(it,type,format.sampleRate,format.channels,pcm,off,n)};sent.addAndGet(n.toLong());off+=n}
         return true
     }
     override fun onPlaybackRouteChanged(listener:(Boolean)->Unit){routeListener=listener;listener(playbackAvailable)}
@@ -90,6 +92,6 @@ class ClientAudioRoute(context:Context,port:Int=Ports.AUDIO):RemoteAudioRoute {
     companion object {
         @Volatile private var current:ClientAudioRoute?=null
         fun snapshot():JSONObject {val c=current;return JSONObject().put("connected",c?.peer?.isClosed==false).put("output",if(c?.outputClient!=false)"CLIENT" else "ANDROID")
-            .put("microphone",c?.inputSource?.name?:"CLIENT").put("micActive",c?.input!=null).put("micBytes",c?.captured?.get()?:0).put("pcmBytes",c?.sent?.get()?:0).put("dropped",c?.dropped?.get()?:0).put("error",c?.failure?:"")}
+            .put("microphone",c?.inputSource?.name?:"CLIENT").put("micActive",c?.input!=null).put("micBytes",c?.captured?.get()?:0).put("pcmBytes",c?.sent?.get()?:0).put("dropped",(c?.dropped?.get()?:0)+(c?.queue?.dropped()?:0)).put("error",c?.failure?:"")}
     }
 }

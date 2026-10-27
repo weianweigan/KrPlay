@@ -57,10 +57,10 @@ public class NaluStreamPlayerTest {
                 Wire.frame(out,configType,0,csd,0,csd.length);
                 Wire.frame(out,frameType,1,key,0,key.length);
                 Wire.frame(out,frameType,2,delta,0,delta.length);
-                Wire.frame(out,frameType,3,delta,0,delta.length);out.flush();
-                // Deliberately hold the decoder: the fifth packet used to throw IOException.
+                for(int i=3;i<=11;i++)Wire.frame(out,frameType,i,delta,0,delta.length);out.flush();
+                // Hold the decoder beyond the 250ms burst grace and bounded frame capacity.
                 await(()->player.overflows.get()>0||player.reconnects.get()>0);
-                assertEquals(0,player.reconnects.get());assertEquals(4,queue.size());
+                assertEquals(0,player.reconnects.get());assertEquals(12,queue.size());
                 Object p;while((p=queue.poll())!=null)free.add(p);
                 Wire.frame(out,frameType,4,delta,0,delta.length);
                 Wire.frame(out,configType,0,csd,0,csd.length);
@@ -72,6 +72,27 @@ public class NaluStreamPlayerTest {
                 assertEquals(1,field(idr,"recovery"));assertEquals(field(idr,"recovery"),field(following,"recovery"));
                 free.add(config);free.add(idr);free.add(following);
                 assertEquals(0,player.reconnects.get());assertTrue(requests.get()>=1&&requests.get()<=3);
+            }finally{player.close();reader.join(3000);assertFalse(reader.isAlive());}
+        }
+    }
+
+    @Test public void shortBurstBackpressurePreservesEveryFrameWithoutRequestingRecovery()throws Exception {
+        NaluStreamPlayer player=new NaluStreamPlayer("127.0.0.1",()->{},s->{},(w,h)->{},new PerformanceStats());
+        BlockingQueue<Object> queue=(BlockingQueue<Object>)field(player,"queue"),free=(BlockingQueue<Object>)field(player,"free");
+        LocalTransport.network=null;
+        try(ServerSocket server=new ServerSocket(8081,1,InetAddress.getLoopbackAddress())){
+            server.setSoTimeout(3000);set(player,"running",true);Thread reader=loop(player,"loop");set(player,"reader",reader);
+            try(Socket peer=server.accept()){
+                DataOutputStream out=new DataOutputStream(peer.getOutputStream());
+                byte[] key={0,0,1,0x65,1},delta={0,0,1,0x41,1};
+                Wire.frame(out,0,0,key,0,key.length);
+                for(int i=1;i<13;i++)Wire.frame(out,0,i,delta,0,delta.length);out.flush();
+                await(()->queue.size()==12);
+                for(int i=0;i<13;i++){
+                    Object packet=queue.poll(1,TimeUnit.SECONDS);assertNotNull(packet);
+                    assertEquals((long)i,field(packet,"pts"));free.add(packet);
+                }
+                assertEquals(0,player.overflows.get());assertEquals(0,player.reconnects.get());
             }finally{player.close();reader.join(3000);assertFalse(reader.isAlive());}
         }
     }

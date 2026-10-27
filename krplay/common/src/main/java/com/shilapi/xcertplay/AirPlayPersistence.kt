@@ -337,7 +337,7 @@ object AirPlayPersistence {
     fun loadModel(context: Context): String =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(KEY_MODEL, null)
-            ?.takeUnless { it == "DiPlay" || it == "DiPlay Web" }
+            ?.takeUnless { it == "DiPlay" || it == "DiPlay Web" || it == "WheelPlay" }
             ?.takeIf { it.isNotBlank() }
             ?: DEFAULT_MODEL
 
@@ -355,7 +355,7 @@ object AirPlayPersistence {
         // iOS hides the car icon without a label.
         val name = (if (legacyDefault) DEFAULT_SIMULATED_MANUFACTURER_NAME else stored)?.trim()?.takeIf { it.isNotBlank() }
             ?: prefs.getString(KEY_MANUFACTURER, null)
-                ?.takeIf { it.isNotBlank() && it != "WheelPlay" && it != "DiPlay" && it != "DiPlay Web" }
+                ?.takeIf { it.isNotBlank() && it != "WheelPlay" && it != "DiPlay" && it != "DiPlay Web" && it != "CarPlay" && it != "KrPlay" }
             ?: DEFAULT_SIMULATED_MANUFACTURER_NAME
         if (stored != name || !prefs.getBoolean(KEY_OEM_LABEL_MIGRATED, false)) {
             prefs.edit().putString(KEY_OEM_LABEL, name).putBoolean(KEY_OEM_LABEL_MIGRATED, true).apply()
