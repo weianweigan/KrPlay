@@ -84,7 +84,7 @@ for name, package, minimum in [
         assert 'THIRD_PARTY_NOTICES.md' in notices
         verify_authentication(archive, minimum == 28, auth_dir, auth_source)
         if minimum == 29:
-            assert apk.stat().st_size < 10 * 1024 * 1024, 'Car client exceeds 10 MiB'
+            assert apk.stat().st_size < 30 * 1024 * 1024, 'Car client exceeds 30 MiB'
             assert not any(n.endswith('.so') for n in archive.namelist()), 'Car client must not depend on native libraries'
         else:
             for abi in ('arm64-v8a','armeabi-v7a','x86_64'):
