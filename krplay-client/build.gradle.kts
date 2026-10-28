@@ -7,7 +7,7 @@ android {
     useLibrary("android.test.runner")
     useLibrary("android.test.base")
     externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
-    defaultConfig { applicationId = "com.krplay.client"; minSdk = 29; targetSdk = 32; versionCode = providers.environmentVariable("KRPLAY_VERSION_CODE").orNull?.toInt() ?: 7001; versionName = providers.environmentVariable("KRPLAY_RELEASE_TAG").orNull ?: "0.7.0" }
+    defaultConfig { applicationId = "com.krplay.client"; minSdk = 29; targetSdk = 32; versionCode = providers.environmentVariable("KRPLAY_VERSION_CODE").orNull?.toInt() ?: 7002; versionName = providers.environmentVariable("KRPLAY_RELEASE_TAG").orNull ?: "0.7.1" }
     val localKey = file(".signing/krplay.p12")
     if (localKey.exists()) {
         signingConfigs.getByName("debug") {

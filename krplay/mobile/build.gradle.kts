@@ -22,8 +22,8 @@ android {
         applicationId = "com.krplay.server"
         minSdk = 28
         targetSdk = 32
-        versionCode = providers.environmentVariable("KRPLAY_VERSION_CODE").orNull?.toInt() ?: 7001
-        versionName = providers.environmentVariable("KRPLAY_RELEASE_TAG").orNull ?: "0.7.0"
+        versionCode = providers.environmentVariable("KRPLAY_VERSION_CODE").orNull?.toInt() ?: 7002
+        versionName = providers.environmentVariable("KRPLAY_RELEASE_TAG").orNull ?: "0.7.1"
 
     }
 

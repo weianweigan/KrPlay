@@ -5,7 +5,7 @@ export const REPO_NAME = 'KrPlay';
 export const GITHUB_REPO_URL = `https://github.com/${REPO_OWNER}/${REPO_NAME}`;
 export const GITHUB_RELEASES_URL = `${GITHUB_REPO_URL}/releases`;
 
-const FALLBACK_TAG = 'v0.7.0';
+const FALLBACK_TAG = 'v0.7.1';
 
 export const FALLBACK_RELEASE: ReleaseInfo = {
   tag: FALLBACK_TAG,
