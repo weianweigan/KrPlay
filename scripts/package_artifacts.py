@@ -99,23 +99,16 @@ for name, package, minimum in [
     digest = hashlib.sha256(apk.read_bytes()).hexdigest()
     apk.with_suffix('.apk.sha256').write_text(f'{digest}  {name}\n')
     artifacts.append(dict(file=name, package=package, version=version, minSdk=minimum, targetSdk=32, bytes=apk.stat().st_size, sha256=digest))
-# Keep the exact dynamically-linked FFmpeg source alongside distributable APKs.
-ffmpeg_source = root / '.local/ffmpeg/ffmpeg-n7.1.1.tar.gz'
-assert hashlib.sha256(ffmpeg_source.read_bytes()).hexdigest() == 'f117507dc501f2a6c11f9241d8d0c3213846cfad91764361af37befd6b6c523d'
-shutil.copyfile(ffmpeg_source, destination / ffmpeg_source.name)
-shutil.copyfile(root / '.local/ffmpeg/build-arm64/config.h', destination / 'ffmpeg-config.h')
 distribution = None if a.allow_local_auth else create_bundle(root, destination)
 manifest = dict(
     builtAtUtc=datetime.now(timezone.utc).isoformat(), commit=source_info['revision'], repository=source_info['repository'], distribution=distribution,
     tag=release['tag'] if release else None, signing='persistent' if signing_certificate else 'development',
     signingCertificateSha256=signing_certificate or None,
     authentication='upstream-release' if a.release_auth else 'local-private' if a.allow_local_auth else 'not-bundled',
-    dependencySources=[dict(file=name, sha256=hashlib.sha256((destination / name).read_bytes()).hexdigest())
-                       for name in (ffmpeg_source.name, 'ffmpeg-config.h')],
     authenticationSource=auth_source, deviceTested=report is not None, deviceTestReport=report, apks=artifacts,
 )
 if release:
-    manifest['releaseFiles'] = [apk['file'] for apk in artifacts] + [entry['file'] for entry in manifest['dependencySources']]
+    manifest['releaseFiles'] = [apk['file'] for apk in artifacts]
     apk_rows = []
     for apk in artifacts:
         target = "Receiver (Phone / TV Box, Android 9+)" if apk['minSdk'] == 28 else "Head Unit (Car screen / Tablet, Android 10+)"

@@ -37,10 +37,6 @@ def verify_release_files(directory, manifest, tag):
         if apk['version'] != tag:
             raise ValueError('APK version must equal the release tag')
         expected[apk['file']] = apk['sha256']
-    for source in manifest.get('dependencySources', []):
-        if source['file'] not in ('ffmpeg-n7.1.1.tar.gz', 'ffmpeg-config.h'):
-            raise ValueError('Unexpected dependency source asset')
-        expected[source['file']] = source['sha256']
     files = manifest['releaseFiles']
     if set(files) != set(expected):
         raise ValueError('Unexpected or missing release assets')
