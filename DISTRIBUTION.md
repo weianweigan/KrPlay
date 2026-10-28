@@ -138,3 +138,15 @@ The update page explains the mismatch and offers the official website. A one-tim
 manual reinstall can remove settings; the app never uninstalls itself.
 See [fixed signing setup](docs/update-signing.zh-CN.md) for interactive key
 generation, backups, Secrets setup, and local signing environment variables.
+
+### ARM64 software decoder
+
+The client now contains FFmpeg 7.1.1 shared libraries and targets arm64-v8a.
+Run `bash scripts/build_ffmpeg_android.sh` (or the client Gradle build) with
+NDK 28.2.13676358 and CMake 3.22.1. The script verifies the official source
+archive by SHA-256; GPL/nonfree components are disabled. The libraries support
+16 KiB pages. For public binary distribution, also provide the unmodified
+`.local/ffmpeg/ffmpeg-n7.1.1.tar.gz`, the generated
+`.local/ffmpeg/build-arm64/config.h`, and this repository's build script/JNI
+source. Shared libraries can be rebuilt, replaced, and the client repackaged
+with Gradle. Keep `docs/licenses/FFmpeg-LGPL-2.1.txt` in the offline notices.

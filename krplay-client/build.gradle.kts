@@ -2,7 +2,12 @@ plugins { id("com.android.application") version "9.1.0" }
 android {
     namespace = "com.krplay.client"
     compileSdk = 35
-    defaultConfig { applicationId = "com.krplay.client"; minSdk = 29; targetSdk = 32; versionCode = providers.environmentVariable("KRPLAY_VERSION_CODE").orNull?.toInt() ?: 6001; versionName = providers.environmentVariable("KRPLAY_RELEASE_TAG").orNull ?: "0.6.0" }
+    ndkVersion = "28.2.13676358"
+    defaultConfig { ndk { abiFilters += "arm64-v8a" }; testInstrumentationRunner = "android.test.InstrumentationTestRunner" }
+    useLibrary("android.test.runner")
+    useLibrary("android.test.base")
+    externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
+    defaultConfig { applicationId = "com.krplay.client"; minSdk = 29; targetSdk = 32; versionCode = providers.environmentVariable("KRPLAY_VERSION_CODE").orNull?.toInt() ?: 7001; versionName = providers.environmentVariable("KRPLAY_RELEASE_TAG").orNull ?: "0.7.0" }
     val localKey = file(".signing/krplay.p12")
     if (localKey.exists()) {
         signingConfigs.getByName("debug") {
@@ -53,4 +58,12 @@ val prepareDistributionAssets by tasks.registering(PrepareDistributionAssets::cl
 }
 androidComponents.onVariants { variant ->
     variant.sources.assets?.addGeneratedSourceDirectory(prepareDistributionAssets, PrepareDistributionAssets::outputDirectory)
+}
+
+// Build the minimal LGPL shared libraries from pinned source before native configuration.
+val buildSoftwareDecoder by tasks.registering(Exec::class) {
+    commandLine("bash", rootProject.file("../scripts/build_ffmpeg_android.sh"))
+}
+tasks.configureEach {
+    if (name.startsWith("configureCMake") || name.startsWith("buildCMake")) dependsOn(buildSoftwareDecoder)
 }

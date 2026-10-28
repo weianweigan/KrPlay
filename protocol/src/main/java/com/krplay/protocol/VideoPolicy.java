@@ -2,13 +2,13 @@ package com.krplay.protocol;
 /** Pure policy shared by the client and offline regression tests. */
 public final class VideoPolicy {
     private VideoPolicy() {}
-    /** Coalesce reconnect, decoder and bridge requests onto one upstream request per second. */
+    /** Coalesce reconnect, decoder and bridge requests onto one upstream request per 800ms. */
     public static final class KeyframeRequests {
         private boolean requested;
         private long lastNs;
         public synchronized boolean acquire(long nowNs) { return acquire(nowNs, false); }
         public synchronized boolean acquire(long nowNs, boolean congested) {
-            if(requested && nowNs-lastNs<(congested?2_000_000_000L:1_000_000_000L))return false;
+            if(requested && nowNs-lastNs<(congested?2_000_000_000L:800_000_000L))return false;
             requested=true;lastNs=nowNs;return true;
         }
     }

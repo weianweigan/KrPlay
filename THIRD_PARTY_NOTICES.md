@@ -18,6 +18,16 @@ upstream project, not the current public KrPlay build.
 
 ## Code
 
+- FFmpeg 7.1.1 (`n7.1.1`): copyright the FFmpeg developers; LGPL-2.1-or-later.
+  The ARM64 client dynamically links minimal `avcodec`, `avutil`, and `swscale`
+  libraries (H.264/HEVC software decoding, NEON and pthreads; no GPL/nonfree options).
+  Full license: [FFmpeg-LGPL-2.1.txt](docs/licenses/FFmpeg-LGPL-2.1.txt).
+  Exact upstream source: https://github.com/FFmpeg/FFmpeg/tree/n7.1.1 .
+  `scripts/build_ffmpeg_android.sh` pins the archive SHA-256 and reproduces these
+  unmodified libraries. Replacement libraries can be linked/repackaged using the
+  public client CMake/Gradle project. Release bundles must accompany the FFmpeg
+  source archive and build configuration as described in DISTRIBUTION.md.
+
 - KrPlay derives from fython/wheelplay, with xcertplay and DiPlay protocol
   ancestry. Fixed source revisions and roles are in
   [docs/upstream-sources.json](docs/upstream-sources.json). Retain copyright

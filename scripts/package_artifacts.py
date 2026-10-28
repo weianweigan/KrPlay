@@ -85,7 +85,8 @@ for name, package, minimum in [
         verify_authentication(archive, minimum == 28, auth_dir, auth_source)
         if minimum == 29:
             assert apk.stat().st_size < 30 * 1024 * 1024, 'Car client exceeds 30 MiB'
-            assert not any(n.endswith('.so') for n in archive.namelist()), 'Car client must not depend on native libraries'
+            for library in ('krplay_decoder', 'avcodec', 'avutil', 'swscale'):
+                assert f'lib/arm64-v8a/lib{library}.so' in archive.namelist(), f'Missing software decoder library: {library}'
         else:
             for abi in ('arm64-v8a','armeabi-v7a','x86_64'):
                 assert f'lib/{abi}/libhev-socks5-tunnel.so' in archive.namelist(), f'Missing VPN library: {abi}'
@@ -98,16 +99,23 @@ for name, package, minimum in [
     digest = hashlib.sha256(apk.read_bytes()).hexdigest()
     apk.with_suffix('.apk.sha256').write_text(f'{digest}  {name}\n')
     artifacts.append(dict(file=name, package=package, version=version, minSdk=minimum, targetSdk=32, bytes=apk.stat().st_size, sha256=digest))
+# Keep the exact dynamically-linked FFmpeg source alongside distributable APKs.
+ffmpeg_source = root / '.local/ffmpeg/ffmpeg-n7.1.1.tar.gz'
+assert hashlib.sha256(ffmpeg_source.read_bytes()).hexdigest() == 'f117507dc501f2a6c11f9241d8d0c3213846cfad91764361af37befd6b6c523d'
+shutil.copyfile(ffmpeg_source, destination / ffmpeg_source.name)
+shutil.copyfile(root / '.local/ffmpeg/build-arm64/config.h', destination / 'ffmpeg-config.h')
 distribution = None if a.allow_local_auth else create_bundle(root, destination)
 manifest = dict(
     builtAtUtc=datetime.now(timezone.utc).isoformat(), commit=source_info['revision'], repository=source_info['repository'], distribution=distribution,
     tag=release['tag'] if release else None, signing='persistent' if signing_certificate else 'development',
     signingCertificateSha256=signing_certificate or None,
     authentication='upstream-release' if a.release_auth else 'local-private' if a.allow_local_auth else 'not-bundled',
+    dependencySources=[dict(file=name, sha256=hashlib.sha256((destination / name).read_bytes()).hexdigest())
+                       for name in (ffmpeg_source.name, 'ffmpeg-config.h')],
     authenticationSource=auth_source, deviceTested=report is not None, deviceTestReport=report, apks=artifacts,
 )
 if release:
-    manifest['releaseFiles'] = [apk['file'] for apk in artifacts]
+    manifest['releaseFiles'] = [apk['file'] for apk in artifacts] + [entry['file'] for entry in manifest['dependencySources']]
     apk_rows = []
     for apk in artifacts:
         target = "Receiver (Phone / TV Box, Android 9+)" if apk['minSdk'] == 28 else "Head Unit (Car screen / Tablet, Android 10+)"
@@ -124,13 +132,13 @@ if release:
 {apk_table}
 
 ## Notes
+- ARM64 NEON FFmpeg software video decoder with automatic MediaCodec hardware decoding fallback.
+- Low-latency direct software frame rendering and robust decoder recovery for vehicle head units.
 - High-fidelity audio streaming, adaptive playout queue and jitter reduction.
-- Audio buffer underrun/overrun recovery and sound quality enhancements.
-- Modern dark mode styling and theme support for head-unit client and receiver.
 - Support customized CarPlay device name and display settings.
 - Internet borrowing is temporarily disabled while the core projection path stabilizes.
 - **Receiver (`KrPlay-{release['tag']}.apk`)**: Includes and verifies matching runtime CarPlay authentication assets; supports system hotspot and USB wired connections.
-- **Head Unit (`KrPlay-Client-{release['tag']}.apk`)**: Ultra-lightweight with zero native library dependencies; automatically discovers and streams CarPlay display to the car screen.
+- **Head Unit (`KrPlay-Client-{release['tag']}.apk`)**: ARM64 NEON FFmpeg software decoder with MediaCodec fallback; automatically discovers and streams CarPlay display to the car screen.
 - Source code is available via GitHub's automatic Source Code (zip / tar.gz) archives.
 - Both apps check GitHub Releases at startup and offer direct APK updates or the official download website: https://krplay.pages.dev/. Manual update checks are available in settings.
 - Both APKs use the persistent project signing key. Android will still ask you to confirm installation.

@@ -77,10 +77,10 @@ fun main(){
             val before=congestionRequests.get()
             repeat(100){congested.requestKeyFrame()}
             val delta=byteArrayOf(0,0,1,0x41,3)
-            repeat(30){congested.pushVideoNalu(false,101L+it,delta,0,delta.size)}
-            Thread.sleep(300)
+            congested.pushVideoNalu(false,101L,delta,0,delta.size)
+            Thread.sleep(80)
             check(congestionRequests.get()==before){"No IDR generation into a partially blocked TCP frame"}
-            check(congested.queueRecoveries.get()>=1)
+            check(congested.queueRecoveries.get()>=1){"A blocked write must flush before the old 250ms threshold, even with only one queued frame"}
             val payload=ByteArray(header.size);input.readFully(payload);check(payload.contentEquals(large)){"Partial write must retain exact frame bytes"}
             val deadline=System.nanoTime()+3_000_000_000L
             while(congestionRequests.get()==before && System.nanoTime()<deadline)Thread.sleep(10)

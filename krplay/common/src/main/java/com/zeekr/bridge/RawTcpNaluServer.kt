@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
 
 /** One owner per stream; bounded preallocated packets, no producer waits on socket I/O. */
 class RawTcpNaluServer(private val port: Int = 8081, private val configureSocket:(Socket)->Unit = { Wire.videoSocket(it) }, private val requestIdr: () -> Unit = {}) {
-    private class Packet { val bytes = ByteArray(Wire.MAX_FRAME); var type=0; var pts=0L; var size=0;var receivedNs=0L;var queuedNs=0L }
+    private class Packet { val bytes = ByteArray(Wire.MAX_FRAME); var generation=0; var type=0; var pts=0L; var size=0;var receivedNs=0L;var queuedNs=0L }
     private val free = ArrayBlockingQueue<Packet>(16).apply { repeat(16) { offer(Packet()) } }
     val slowDisconnects=java.util.concurrent.atomic.AtomicLong()
     val sourceResets=java.util.concurrent.atomic.AtomicLong()
@@ -29,6 +29,7 @@ class RawTcpNaluServer(private val port: Int = 8081, private val configureSocket
     val queueDepth get()=client?.queue?.size?:0
     val keyframeRequests=java.util.concurrent.atomic.AtomicLong()
     private class Client(val socket: Socket) {
+        var generation=0
         val queue=ArrayBlockingQueue<Packet>(12)
         @Volatile var writingSince=0L
         @Volatile var progressNs=0L
@@ -109,11 +110,11 @@ class RawTcpNaluServer(private val port: Int = 8081, private val configureSocket
         val c=client?:return
         if(c.waitingKey&&!key){requestKeyFrame(c);return}
         val oldest=c.queue.peek()
-        if(!hevc && (oldest==null || System.nanoTime()-oldest.queuedNs<=250_000_000L) &&
+        if(!hevc && (oldest==null || System.nanoTime()-oldest.queuedNs<=10_000_000L) &&
             (c.queue.remainingCapacity()==0||free.isEmpty()) && Wire.discardableAvc(src,offset,length)){
             nonReferenceDrops.incrementAndGet();return
         }
-        if((oldest!=null && System.nanoTime()-oldest.queuedNs>250_000_000L) ||
+        if((oldest!=null && System.nanoTime()-oldest.queuedNs>10_000_000L) ||
             c.queue.remainingCapacity()<(if(key)2 else 1) || free.size<(if(key)2 else 1)){
             queueRecoveries.incrementAndGet()
             clearQueued(c);c.waitingKey=true
@@ -123,6 +124,7 @@ class RawTcpNaluServer(private val port: Int = 8081, private val configureSocket
         enqueue(c,if(hevc)1 else 0,pts,src,offset,length,receivedNs)
     }
     private fun clearQueued(c:Client){
+        c.generation++
         var resolution=false
         while(true){val p=c.queue.poll()?:break;if(p.type==4)resolution=true; if(p.type==0||p.type==1)staleFrames.incrementAndGet();free.offer(p)}
         if(resolution)enqueue(c,4,0,byteArrayOf((width shr 8).toByte(),width.toByte(),(height shr 8).toByte(),height.toByte()))
@@ -130,12 +132,12 @@ class RawTcpNaluServer(private val port: Int = 8081, private val configureSocket
     /** All control, overflow and watchdog requests share this congestion gate. */
     fun requestKeyFrame(){client?.let{requestKeyFrame(it)}}
     private fun requestKeyFrame(c:Client){c.requestPending=true;dispatchKeyFrame(c)}
-    private fun dispatchKeyFrame(c:Client){
+    @Synchronized private fun dispatchKeyFrame(c:Client){
         val now=System.nanoTime()
         // A partial TCP frame must finish first. Never generate more IDRs into a
         // blocked writer; retry from the watchdog once the channel has drained.
         if(!c.requestPending || !c.queue.isEmpty() || c.writingSince!=0L) return
-        if(c.lastKeySentNs!=0L && now-c.lastKeySentNs<500_000_000L)return
+        if(c.lastKeySentNs!=0L && now-c.lastKeySentNs<800_000_000L)return
         if(running && client===c && !c.socket.isClosed && c.requests.acquire(now)){
             c.requestPending=false;keyframeRequests.incrementAndGet();runCatching{requestIdr()}
         }
@@ -146,7 +148,7 @@ class RawTcpNaluServer(private val port: Int = 8081, private val configureSocket
         else->0
     } else 0
     @Synchronized fun pushAudioPcm(pts:Long,src:ByteArray,offset:Int,length:Int){if(length<0||length%4!=0||length>Wire.MAX_FRAME||offset<0||offset>src.size-length)return;client?.let{enqueue(it,16,pts,src,offset,length)}}
-    private fun enqueue(c:Client,t:Int,pts:Long,b:ByteArray,o:Int=0,n:Int=b.size,receivedNs:Long=0){val p=free.poll()?:return;p.type=t;p.pts=pts;p.size=n;p.receivedNs=receivedNs;p.queuedNs=System.nanoTime();b.copyInto(p.bytes,0,o,o+n);if(!c.queue.offer(p))free.offer(p)}
+    private fun enqueue(c:Client,t:Int,pts:Long,b:ByteArray,o:Int=0,n:Int=b.size,receivedNs:Long=0){val p=free.poll()?:return;p.generation=c.generation;p.type=t;p.pts=pts;p.size=n;p.receivedNs=receivedNs;p.queuedNs=System.nanoTime();b.copyInto(p.bytes,0,o,o+n);if(!c.queue.offer(p))free.offer(p)}
     private fun send(c:Client){
         try {
             val channel=c.socket.channel ?: error("Video socket requires SocketChannel")
@@ -155,8 +157,11 @@ class RawTcpNaluServer(private val port: Int = 8081, private val configureSocket
                 channel.register(selector,SelectionKey.OP_WRITE)
                 fun writeFully(bytes:ByteBuffer){
                     while(bytes.hasRemaining() && running && !c.socket.isClosed){
-                        val limit=bytes.limit();bytes.limit(minOf(limit,bytes.position()+16*1024))
+                        val limit=bytes.limit();bytes.limit(minOf(limit,bytes.position()+8*1024))
                         val written=try{channel.write(bytes)}finally{bytes.limit(limit)}
+                        if(c.writingSince!=0L && System.nanoTime()-c.writingSince>10_000_000L && !c.waitingKey){
+                            synchronized(this){clearQueued(c);c.waitingKey=true;c.requestPending=true;queueRecoveries.incrementAndGet()}
+                        }
                         if(written>0)c.progressNs=System.nanoTime()
                         else {selector.select(5);selector.selectedKeys().clear()}
                     }
@@ -166,11 +171,14 @@ class RawTcpNaluServer(private val port: Int = 8081, private val configureSocket
                     val p=c.queue.poll(100,TimeUnit.MILLISECONDS)?:continue
                     try {
                         val now=System.nanoTime()
-                        if((p.type==0||p.type==1) && now-p.queuedNs>250_000_000L){
-                            synchronized(this){staleFrames.incrementAndGet();clearQueued(c);c.waitingKey=true;queueRecoveries.incrementAndGet()}
-                            requestKeyFrame(c);continue
+                        val sendPacket=synchronized(this){
+                            if((p.type==0||p.type==1) && p.generation!=c.generation){
+                                staleFrames.incrementAndGet();false
+                            } else if((p.type==0||p.type==1) && now-p.queuedNs>10_000_000L){
+                                staleFrames.incrementAndGet();clearQueued(c);c.waitingKey=true;c.requestPending=true;queueRecoveries.incrementAndGet();false
+                            } else {c.progressNs=now;c.writingSince=now;true}
                         }
-                        c.progressNs=now;c.writingSince=now
+                        if(!sendPacket){dispatchKeyFrame(c);continue}
                         val timed=timingEnabled&&(p.type==0||p.type==1)&&p.size<=Wire.MAX_FRAME-16
                         val header=ByteBuffer.allocate(if(timed)29 else 13)
                         header.put((if(timed)if(p.type==0)20 else 21 else p.type).toByte())
@@ -179,7 +187,7 @@ class RawTcpNaluServer(private val port: Int = 8081, private val configureSocket
                         header.flip();writeFully(header);writeFully(ByteBuffer.wrap(p.bytes,0,p.size))
                         lastWriteMs=(System.nanoTime()-now)/1e6
                         if((p.type==0||p.type==1)&&Wire.randomAccess(p.type==1,p.bytes,p.size)){
-                            c.lastKeySentNs=System.nanoTime();c.requestPending=false
+                            c.lastKeySentNs=System.nanoTime();if(!c.waitingKey)c.requestPending=false
                         }
                     }finally{c.writingSince=0;free.offer(p)}
                     dispatchKeyFrame(c)

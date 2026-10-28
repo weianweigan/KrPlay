@@ -17,6 +17,7 @@ final class NaluStreamPlayer implements AutoCloseable {
     private final String host;private final Runnable idr;private final Consumer<String> status;private final Size size;
     final PerformanceStats clock;
     private volatile boolean running;private volatile Socket socket;private volatile Surface surface;private volatile int surfaceEpoch,connectionEpoch;
+    private volatile SoftwareVideoDecoder software;private boolean softwareFailed;
     private Thread reader,codecThread;private volatile MediaCodec decoder;private String mime="";private int width=1920,height=1080,epoch=-1,connection=-1;
     private byte[] csd;private volatile boolean waitKey=true,networkWaitingForKey;private int recovery=-1;private long codecRetryAfterNs;
     private final VideoPolicy.KeyframeRequests keyframeRequests=new VideoPolicy.KeyframeRequests();
@@ -53,7 +54,13 @@ final class NaluStreamPlayer implements AutoCloseable {
                     if(!queue.offer(p)){
                         int offset=type==20?16:0;
                         if((type==0||type==20)&&Wire.discardableAvc(p.bytes,offset,n-offset)){nonReferenceDrops.incrementAndGet();continue;}
-                        if(!queue.offer(p,250,TimeUnit.MILLISECONDS)){overflows.incrementAndGet();recoveryGeneration++;networkWaitingForKey=true;lastRecoveryReason="客户端视频队列持续积压超过 250ms";requestKeyFrame();continue;}
+                        overflows.incrementAndGet();recoveryGeneration++;networkWaitingForKey=true;
+                        // Only the reader produces packets. Preserve configuration/resolution,
+                        // evict queued reference frames together, then restart at a new IDR.
+                        for(Packet old:queue.toArray(new Packet[0]))if(VideoPolicy.videoPacket(old.type)&&queue.remove(old))free.offer(old);
+                        p.recovery=recoveryGeneration;lastRecoveryReason="客户端积压已清空，等待关键帧";
+                        requestKeyFrame();if(!key)continue;
+                        if(!queue.offer(p))continue;
                     }
                     if(key)networkWaitingForKey=false;
                 }else queue.put(p);
@@ -73,7 +80,16 @@ final class NaluStreamPlayer implements AutoCloseable {
                 int off=timed?16:0,n=p.n-off;boolean key=timed?randomAccess(m.equals("video/hevc"),p.bytes,off,n):Wire.randomAccess(m.equals("video/hevc"),p.bytes,n);
                 if(epoch!=surfaceEpoch)reset();
                 if(waitKey&&!key){requestKeyFrame();continue;}
-                if(decoder==null){if(System.nanoTime()<codecRetryAfterNs){requestKeyFrame();continue;}create(m);}
+                if(decoder==null&&software==null){if(System.nanoTime()<codecRetryAfterNs){requestKeyFrame();continue;}create(m);}
+                if(software!=null){
+                    long now=System.nanoTime(),pts=Math.max(now/1000,lastPts+1);lastPts=pts;
+                    Timing t=new Timing();t.submit=now;t.receive=p.received;
+                    if(timed){ByteBuffer v=ByteBuffer.wrap(p.bytes,0,16);t.ingress=v.getLong();t.send=v.getLong();}
+                    if(pending.size()>64)pending.clear();pending.put(pts,t);
+                    long ready=software.submit(p.bytes,off,n,pts);long done=System.nanoTime();
+                    Timing output=ready==pts?t:pending.get(ready);if(output!=null){decodeReadyMs=(done-output.submit)/1e6;bridgeReadyMs=clock.bridgeMs(output.ingress,done);}
+                    waitKey=false;continue;
+                }
                 int idx=decoder.dequeueInputBuffer(0),attempts=0;
                 long started=System.nanoTime();lastCodecProgressNs=started;boolean warned=false;
                 while(idx<0 && running){
@@ -91,7 +107,7 @@ final class NaluStreamPlayer implements AutoCloseable {
                 if(pending.size()>64)pending.clear();Timing t=new Timing();t.submit=now;t.receive=p.received;if(timed){ByteBuffer v=ByteBuffer.wrap(p.bytes,0,16);t.ingress=v.getLong();t.send=v.getLong();}pending.put(pts,t);
                 decoder.queueInputBuffer(idx,0,n,pts,0);lastCodecProgressNs=now;waitKey=false;drain();
             }
-        }catch(InterruptedException e){break;}catch(Exception e){lastRecoveryReason=failure(e);android.util.Log.w("KrPlay-Video","Codec recovery: "+e.getClass().getSimpleName()+" "+e.getMessage());reset();codecRetryAfterNs=System.nanoTime()+500_000_000L;requestKeyFrame();status.accept("视频恢复 · "+failure(e));}finally{if(p!=null)free.offer(p);}}
+        }catch(InterruptedException e){break;}catch(Exception e){if(software!=null)softwareFailed=true;lastRecoveryReason=failure(e);android.util.Log.w("KrPlay-Video","Codec recovery: "+e.getClass().getSimpleName()+" "+e.getMessage());reset();codecRetryAfterNs=System.nanoTime()+500_000_000L;requestKeyFrame();status.accept("视频恢复 · "+failure(e));}finally{if(p!=null)free.offer(p);}}
         reset();Packet p;while((p=queue.poll())!=null)free.offer(p);
     }
     private boolean randomAccess(boolean hevc,byte[] data,int offset,int n){for(int i=offset;i+3<offset+n;i++)if(data[i]==0&&data[i+1]==0){int k=data[i+2]==1?3:data[i+2]==0&&data[i+3]==1?4:0;if(k>0&&i+k<offset+n&&Wire.key(hevc,hevc?(data[i+k]>>1)&63:data[i+k]&31))return true;}return false;}
@@ -110,7 +126,22 @@ final class NaluStreamPlayer implements AutoCloseable {
     }
     private static String failure(Exception e){String message=e.getMessage();return e.getClass().getSimpleName()+(message==null?"":" · "+message);}
     private void create(String m)throws IOException {
-        try{create(m,true);decoderTuning="低延迟 / operating-rate 120 已请求";}
+        if(!softwareFailed&&SoftwareVideoDecoder.AVAILABLE){
+            try {
+                software=new SoftwareVideoDecoder(m.equals("video/hevc"),surface,csd,(owner,pts)->{
+                    if(owner!=software)return;
+                    long now=System.nanoTime();lastRenderNs=now;renderedFrames.incrementAndGet();
+                    Timing t=pending.remove(pts);
+                    for(Long old:pending.keySet())if(old<pts&&pending.remove(old)!=null)catchupFrames.incrementAndGet();
+                    if(t!=null){decodeMs=(now-t.submit)/1e6;bridgeMs=clock.bridgeMs(t.ingress,now);clock.latency(bridgeMs);
+                        if(t.send>0&&clock.synced()){transferMs=Math.max(0,(t.receive-(t.send-clock.offsetNs()))/1e6);serverQueueMs=t.ingress>0?Math.max(0,(t.send-t.ingress)/1e6):Double.NaN;}}
+                });
+                epoch=surfaceEpoch;codec="FFmpeg "+(m.equals("video/hevc")?"HEVC":"H.264");
+                decoderTuning="ARM64 NEON / slice 4线程 / LOW_DELAY / 最新帧异步提交";
+                status.accept("已连接 · "+width+" × "+height+" · "+codec);return;
+            }catch(RuntimeException failure){softwareFailed=true;android.util.Log.w("KrPlay-Video","Software init failed; falling back to MediaCodec",failure);}
+        }
+        try{create(m,true);decoderTuning=(softwareFailed?"软解失败回退 / ":"")+"低延迟 / operating-rate 120 已请求";}
         catch(RuntimeException unsupported){
             android.util.Log.w("KrPlay-Video","Optional decoder tuning rejected; retrying baseline",unsupported);
             create(m,false);decoderTuning="可选参数被拒绝，使用兼容配置";
@@ -152,6 +183,6 @@ final class NaluStreamPlayer implements AutoCloseable {
         }
         if(latest>=0)releaseOutput(latest,latestPts,!queuedVideo());
     }
-    private void reset(){waitKey=true;pending.clear();if(decoder!=null){MediaCodec d=decoder;decoder=null;decoderResets.incrementAndGet();try{d.stop();}catch(RuntimeException ignored){}try{d.release();}catch(RuntimeException ignored){}}}
+    private void reset(){if(software!=null){SoftwareVideoDecoder old=software;software=null;old.close();decoderResets.incrementAndGet();}waitKey=true;pending.clear();if(decoder!=null){MediaCodec d=decoder;decoder=null;decoderResets.incrementAndGet();try{d.stop();}catch(RuntimeException ignored){}try{d.release();}catch(RuntimeException ignored){}}}
     public void close(){running=false;Wire.close(socket);if(reader!=null)reader.interrupt();if(codecThread!=null)codecThread.interrupt();if(renderThread!=null)renderThread.quitSafely();}
 }

@@ -20,8 +20,8 @@ public final class ProtocolTest {
         VideoPolicy.KeyframeRequests requests=new VideoPolicy.KeyframeRequests();
         check(requests.acquire(-2_000_000_000L),"first request accepts a negative monotonic clock origin");
         check(!requests.acquire(-1_999_000_000L),"concurrent reconnect/decoder requests coalesced");
-        check(!requests.acquire(-1_000_000_001L),"keyframe request cooldown retained");
-        check(requests.acquire(-1_000_000_000L),"missing keyframe can be requested again after one second");
+        check(!requests.acquire(-1_200_000_001L),"keyframe request cooldown retained");
+        check(requests.acquire(-1_200_000_000L),"missing keyframe can be requested again after 800ms");
         check(!requests.acquire(0,true),"high RTT extends retry cooldown");
         check(requests.acquire(1_000_000_000L,true),"congested recovery still eventually retries");
         check(!VideoPolicy.inputStalled(60_000_000L,0,60),"60ms VPU bubble must not recreate codec");
