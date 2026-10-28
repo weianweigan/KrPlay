@@ -124,10 +124,10 @@ if release:
 {apk_table}
 
 ## Notes
+- High-fidelity audio streaming, adaptive playout queue and jitter reduction.
+- Audio buffer underrun/overrun recovery and sound quality enhancements.
 - Modern dark mode styling and theme support for head-unit client and receiver.
 - Support customized CarPlay device name and display settings.
-- Realtime audio queue synchronization and jitter reduction.
-- Video stream recovery, catch-up and latency optimizations.
 - Internet borrowing is temporarily disabled while the core projection path stabilizes.
 - **Receiver (`KrPlay-{release['tag']}.apk`)**: Includes and verifies matching runtime CarPlay authentication assets; supports system hotspot and USB wired connections.
 - **Head Unit (`KrPlay-Client-{release['tag']}.apk`)**: Ultra-lightweight with zero native library dependencies; automatically discovers and streams CarPlay display to the car screen.

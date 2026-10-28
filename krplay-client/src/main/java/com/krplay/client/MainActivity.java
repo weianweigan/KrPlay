@@ -148,6 +148,18 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     }
     private void renderNetwork(){if(networkText==null)return;JSONObject result=remote.optJSONObject("test");String detail="尚未检测";if(result!=null){String state=result.optString("state");if(state.equals("success"))detail=String.format(Locale.US,"通道可用 · TLS %.0f ms\n下载 %.2f Mbps · %.2f MiB",result.optDouble("latencyMs"),result.optDouble("mbps"),result.optLong("bytes")/1048576.0);else if(state.equals("failed"))detail="检测失败："+result.optString("error");else if(state.equals("running"))detail=result.has("mbps")?String.format(Locale.US,"测速中 · %.2f Mbps",result.optDouble("mbps")):"正在通过车载网络检测…";}
         networkText.setText(remote.optString("fixedEntryMessage","正在获取固定入口状态")+"\nTCP / DNS 借网 · UDP 暂不支持\n"+remote.optString("vpnMessage","等待设备状态")+"\n可用通道："+remote.optInt("idleWorkers")+String.format(Locale.US,"\nVPN 接收 %.2f MiB / 发送 %.2f MiB\n\n",remote.optLong("rxBytes")/1048576.0,remote.optLong("txBytes")/1048576.0)+detail);}
+    private int musicBufferMs(){return com.krplay.protocol.AudioPolicy.bufferMs(getSharedPreferences("audio",0).getInt("musicBufferMs",300));}
+    private void audioSettings(){
+        int[] values={300,500,1000};int selected=musicBufferMs()==1000?2:musicBufferMs()==500?1:0;
+        new MaterialAlertDialogBuilder(this).setTitle("客户端音乐缓冲")
+            .setSingleChoiceItems(new String[]{"300 ms · 默认","500 ms · 更耐网络波动","1000 ms · 优先连续播放"},selected,(dialog,which)->{
+                getSharedPreferences("audio",0).edit().putInt("musicBufferMs",values[which]).apply();
+                if(audio!=null)audio.close();if(active){audio=new ClientAudio(this,host);audio.start();}
+                dialog.dismiss();Toast.makeText(this,"音乐缓冲已更新，音频正在重新连接",Toast.LENGTH_SHORT).show();
+            }).setNeutralButton("说明",(dialog,which)->new MaterialAlertDialogBuilder(this).setTitle("音乐缓冲")
+                .setMessage("更大的缓冲可减少网络波动造成的断音，但会增加音乐启动与切歌的等待时间。保持原采样率与声道；通话、Siri 和导航提示使用独立的低延迟缓冲。此设置只影响本客户端播放。")
+                .setPositiveButton("知道了",null).show()).setNegativeButton("取消",null).show();
+    }
     private void settings(){
         boolean dark=isDark();
         LinearLayout form=new LinearLayout(this);form.setOrientation(LinearLayout.VERTICAL);form.setPadding(dp(20),dp(4),dp(20),dp(16));
@@ -156,6 +168,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         MaterialCheckBox automatic=new MaterialCheckBox(this);automatic.setText("自动连接（推荐）");automatic.setTextColor(UiPalette.text(dark));automatic.setChecked(automaticConnection);form.addView(automatic);
         EditText input=new EditText(this);input.setSingleLine();input.setSelectAllOnFocus(true);input.setText(host);input.setHint("例如 192.168.43.1");input.setTextColor(UiPalette.text(dark));input.setHintTextColor(UiPalette.muted(dark));input.setEnabled(!automaticConnection);form.addView(input);
         automatic.setOnCheckedChangeListener((b,on)->input.setEnabled(!on));
+        dialogButton(form,"音乐缓冲 · "+musicBufferMs()+" ms",this::audioSettings);
         TextView sourceOffer=text("开源与许可：免费获取完整源码与构建脚本",14,UiPalette.muted(dark));sourceOffer.setPadding(0,dp(12),0,dp(4));form.addView(sourceOffer);
         dialogButton(form,"检查更新 · "+com.krplay.update.AppUpdates.installedVersion(this),()->com.krplay.update.AppUpdates.open(this));
         dialogButton(form,"KrPlay 项目仓库",()->com.krplay.distribution.SourceDistribution.open(this,com.krplay.distribution.SourceDistribution.REPOSITORY));
@@ -209,6 +222,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         MaterialCheckBox toggle=new MaterialCheckBox(this);toggle.setText("显示帧率、延迟和传输速率");toggle.setTextColor(UiPalette.accent(dark));toggle.setChecked(showPerformance);toggle.setOnCheckedChangeListener((b,on)->{showPerformance=on;performanceHud.setVisibility(on?View.VISIBLE:View.GONE);getPreferences(0).edit().putBoolean("showPerformance",on).apply();});panel.addView(toggle);
         performanceText=text(performanceSummary(),13,UiPalette.muted(dark));performanceText.setTextIsSelectable(true);panel.addView(performanceText);
         dialogButton(panel,"图像规格 · "+profileLabel(),()->new MaterialAlertDialogBuilder(this).setTitle("客户端接收分辨率").setSingleChoiceItems(new String[]{"设备原生分辨率","1080p","720p · 默认低延迟"},videoProfile,(d,w)->{videoProfile=w;getPreferences(0).edit().putInt("videoProfile",w).apply();clock.reset();sendViewport();d.dismiss();performanceDialog.dismiss();Toast.makeText(this,"已请求新分辨率，KrPlay 可能重新连接 iPhone",Toast.LENGTH_LONG).show();}).setNegativeButton("取消",null).show());
+        dialogButton(panel,"音乐缓冲 · "+musicBufferMs()+" ms",this::audioSettings);
         dialogButton(panel,"局域网延迟检测",()->diagnostics.run(host,false,this::recordLinkResult));
         dialogButton(panel,"双向传输测速 · 共 16 MiB",()->diagnostics.run(host,true,this::recordLinkResult));
         dialogButton(panel,"保存并复制诊断",()->{String report=performanceSummary()+"\n\n"+diagnosis()+"\n\n"+linkResult;try(java.io.FileOutputStream out=openFileOutput("performance.txt",MODE_PRIVATE)){out.write(report.getBytes(java.nio.charset.StandardCharsets.UTF_8));}catch(java.io.IOException ignored){}android.content.ClipboardManager clipboard=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);clipboard.setPrimaryClip(android.content.ClipData.newPlainText("KrPlay 性能诊断",report));Toast.makeText(this,"诊断已保存并复制，不包含音视频内容",Toast.LENGTH_SHORT).show();});

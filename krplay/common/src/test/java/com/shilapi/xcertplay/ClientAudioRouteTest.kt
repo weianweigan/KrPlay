@@ -42,4 +42,43 @@ class ClientAudioRouteTest {
             }
         }finally{source.close();route.close()}
     }
+    @Test fun bufferedPeerPreservesMusicAndFeedbackDoesNotBlockPromptOrCancellation(){
+        val app=RuntimeEnvironment.getApplication();AirPlayPersistence.saveAudioOutput(app,CarPlayAudioOutput.CLIENT)
+        val route=ClientAudioRoute(app,0)
+        try { Socket("127.0.0.1",route.localPort).use { socket ->
+            socket.soTimeout=2000
+            val out=DataOutputStream(socket.getOutputStream());val input=DataInputStream(socket.getInputStream())
+            out.writeInt(AudioWire.MAGIC);out.writeByte(AudioWire.BUFFERED_VERSION);out.writeBoolean(false);out.writeInt(300);out.flush()
+            assertEquals(AudioWire.HELLO_V2,input.readUnsignedByte());assertEquals(2,input.readUnsignedByte())
+            // HELLO precedes peer publication by a few instructions.
+            repeat(100){if(!route.playbackAvailable)Thread.sleep(2)};assertTrue(route.playbackAvailable)
+            val music=ByteArray(48000*4*3/2){(it*31).toByte()}
+            assertTrue(route.output(102,AudioFormat(AudioCodecKind.LPCM,48000,2,96,"media"),music,0,music.size))
+            Thread.sleep(600) // temporary receiver pause must not age out preserved music
+            var epoch=0;var frames=0L
+            val got=ByteArrayOutputStream()
+            fun readPcm(expectedType:Int):Int {
+                assertEquals(AudioWire.PCM_V2,input.readUnsignedByte());assertEquals(expectedType,input.readInt())
+                val e=input.readInt();val purpose=input.readUnsignedByte();val rate=input.readInt();val channels=input.readUnsignedByte();val first=input.readLong();val n=input.readUnsignedShort()
+                val bytes=ByteArray(n);input.readFully(bytes)
+                if(expectedType==102){epoch=e;assertEquals(0,purpose);assertEquals(48000,rate);assertEquals(2,channels);assertEquals(frames,first);frames+=n/4;got.write(bytes)}
+                else {assertEquals(3,purpose);assertArrayEquals(byteArrayOf(1,2,3,4),bytes)}
+                return n
+            }
+            repeat(50){readPcm(102)} // 1000 ms total window, no credit yet
+            socket.soTimeout=100
+            try { input.readUnsignedByte();fail("music exceeded playback credit") } catch(_:SocketTimeoutException) {}
+            socket.soTimeout=2000
+            route.output(101,AudioFormat(AudioCodecKind.LPCM,24000,1,96,"default"),byteArrayOf(1,2,3,4),0,4)
+            readPcm(101) // prompt bypasses blocked music window
+            out.writeByte(AudioWire.PROGRESS);out.writeInt(102);out.writeInt(epoch);out.writeLong(24000);out.flush()
+            repeat(25){readPcm(102)}
+            assertArrayEquals(music,got.toByteArray())
+            route.audioStopped(102)
+            assertEquals(AudioWire.END_V2,input.readUnsignedByte());assertEquals(102,input.readInt());assertEquals(epoch,input.readInt());assertFalse(input.readBoolean())
+            route.output(102,AudioFormat(AudioCodecKind.LPCM,48000,2,96,"media"),byteArrayOf(9,8,7,6),0,4)
+            assertEquals(AudioWire.PCM_V2,input.readUnsignedByte());assertEquals(102,input.readInt());assertTrue(input.readInt()>epoch)
+        }} finally {route.close()}
+    }
+
 }

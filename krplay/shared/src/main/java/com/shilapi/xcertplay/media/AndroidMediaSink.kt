@@ -646,6 +646,7 @@ private class AudioRenderer(
     private var pcm = ByteArray(64 * 1024)
     private var playbackStarted = false
     private var remotePlayback = false
+    private val remoteOutputLock = Any()
     private var prebufferBytes = 0
     private var startThresholdBytes = 0
     private var fadeApplied = false
@@ -695,7 +696,7 @@ private class AudioRenderer(
     }
 
     override fun close() {
-        running = false
+        synchronized(remoteOutputLock) { running = false }
         thread.interrupt()
     }
 
@@ -999,7 +1000,11 @@ private class AudioRenderer(
     }
 
     private fun writePcm(data: ByteArray, offset: Int = 0, length: Int = data.size) {
-        if (remoteOutput(data, offset, length)) {
+        val forwarded = synchronized(remoteOutputLock) {
+            if (!running) return
+            remoteOutput(data, offset, length)
+        }
+        if (forwarded) {
             if (!remotePlayback) {
                 track?.pause(); track?.flush()
                 playbackStarted = false; prebufferBytes = 0

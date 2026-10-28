@@ -2,7 +2,7 @@ plugins { id("com.android.application") version "9.1.0" }
 android {
     namespace = "com.krplay.client"
     compileSdk = 35
-    defaultConfig { applicationId = "com.krplay.client"; minSdk = 29; targetSdk = 32; versionCode = providers.environmentVariable("KRPLAY_VERSION_CODE").orNull?.toInt() ?: 5001; versionName = providers.environmentVariable("KRPLAY_RELEASE_TAG").orNull ?: "0.5.0" }
+    defaultConfig { applicationId = "com.krplay.client"; minSdk = 29; targetSdk = 32; versionCode = providers.environmentVariable("KRPLAY_VERSION_CODE").orNull?.toInt() ?: 6001; versionName = providers.environmentVariable("KRPLAY_RELEASE_TAG").orNull ?: "0.6.0" }
     val localKey = file(".signing/krplay.p12")
     if (localKey.exists()) {
         signingConfigs.getByName("debug") {
