@@ -28,7 +28,10 @@ object KrPlayAppExit {
             CarPlayBackgroundSession.clear()
         }
 
-        // 2. Stop VPN services
+        // 2. Stop VPN and root network services
+        runCatching {
+            com.zeekr.bridge.RootNetworkManager.stop()
+        }
         runCatching {
             appContext.stopService(Intent(appContext, BorrowVpnService::class.java))
         }
@@ -78,6 +81,9 @@ object KrPlayAppExit {
             ConnectionDiagnostics.disconnected("退出应用")
             CarPlayBackgroundSession.stop()
             CarPlayBackgroundSession.clear()
+        }
+        runCatching {
+            com.zeekr.bridge.RootNetworkManager.stop()
         }
         runCatching {
             appContext.stopService(Intent(appContext, BorrowVpnService::class.java))

@@ -130,11 +130,24 @@ class DiPlayActivity : AppCompatActivity() {
         }
         ui.card(content,"固定连接入口",R.drawable.ic_server_wifi){body->
             fixedEntryState=label("",15,TEXT);body.addView(fixedEntryState)
-            val automatic=android.widget.Switch(this).apply{text="启动时开启固定入口 VPN";setTextColor(TEXT);isChecked=com.zeekr.bridge.NetworkAccessSettings.automatic(this@DiPlayActivity)
-                setOnCheckedChangeListener{_,on->com.zeekr.bridge.NetworkAccessSettings.automatic(this@DiPlayActivity,on);if(on)requestVpn(false)else if(!com.zeekr.bridge.BorrowVpnService.active)stopService(Intent(this@DiPlayActivity,com.zeekr.bridge.BorrowVpnService::class.java))}}
+            val automatic=android.widget.Switch(this).apply{text="启动时开启固定入口";setTextColor(TEXT);isChecked=com.zeekr.bridge.NetworkAccessSettings.automatic(this@DiPlayActivity)
+                setOnCheckedChangeListener{_,on->com.zeekr.bridge.NetworkAccessSettings.automatic(this@DiPlayActivity,on);if(on)requestVpn(false)else if(com.zeekr.bridge.RootNetworkManager.isRunning)com.zeekr.bridge.RootNetworkManager.stop{runOnUiThread{refreshService()}}else if(!com.zeekr.bridge.BorrowVpnService.active)stopService(Intent(this@DiPlayActivity,com.zeekr.bridge.BorrowVpnService::class.java))}}
             body.addView(automatic)
+            if(com.zeekr.bridge.RootUtils.isRootAvailable()){
+                val rootSwitch=android.widget.Switch(this).apply{text="使用 Root 系统级网络（免占 VPN 槽位）";setTextColor(TEXT);isChecked=com.zeekr.bridge.NetworkAccessSettings.rootNetworkEnabled(this@DiPlayActivity)
+                    setOnCheckedChangeListener{_,on->
+                        com.zeekr.bridge.NetworkAccessSettings.rootNetworkEnabled(this@DiPlayActivity,on)
+                        if(on){
+                            stopService(Intent(this@DiPlayActivity,com.zeekr.bridge.BorrowVpnService::class.java))
+                            com.zeekr.bridge.RootNetworkManager.start(this@DiPlayActivity){_,msg->runOnUiThread{toast(msg);refreshService()}}
+                        }else{
+                            com.zeekr.bridge.RootNetworkManager.stop{runOnUiThread{requestVpn(false);refreshService()}}
+                        }
+                    }}
+                body.addView(rootSwitch)
+            }
             body.addView(button("开启 / 重试固定入口",false){requestVpn(false)},matchButton(12))
-            body.addView(label("首次需要系统 VPN 授权。固定入口不接管外网。虚拟机仍需能路由到热点，固定 IP 无法绕过宿主的网络隔离。",14,MUTED))
+            body.addView(label(if(com.zeekr.bridge.RootUtils.isRootAvailable()&&com.zeekr.bridge.NetworkAccessSettings.rootNetworkEnabled(this))"当前使用 Root 系统级网络配置，不占用 Android VPN 槽位，无需系统授权。" else "首次需要系统 VPN 授权。固定入口不接管外网。虚拟机仍需能路由到热点，固定 IP 无法绕过宿主的网络隔离。",14,MUTED))
         }
         ui.card(content,"iPhone 连接",R.drawable.ic_server_phone){body->
             body.addView(button("管理 iPhone",true,R.drawable.ic_server_phone){navigate("phone")},matchButton())
@@ -173,8 +186,42 @@ class DiPlayActivity : AppCompatActivity() {
         networkState?.text=com.zeekr.bridge.BorrowVpnService.message+"\n可用通道：${com.zeekr.bridge.ZeekrBridgeManager.idleWorkers()}\n"+com.zeekr.bridge.TunnelDiagnostics.description()
     }
     private fun continueInitialLaunch(){if(initialLaunch&&!vpnRequestPending&&!ensureAutomaticEntry()){initialLaunch=false;if(setupError==null&&DiPlayPreferences.autoConnect(this)&&!CarPlayBackgroundSession.hasSession()&&intent.getStringExtra("page")==null)handler.post{connect(AirPlayPersistence.loadWirelessEnabled(this))}}}
+    private fun promptRootModeSelection(){
+        MaterialAlertDialogBuilder(this)
+            .setTitle("固定入口网络模式")
+            .setMessage("检测到当前设备具有 Root 权限。\n\n请选择固定入口的网络模式：\n\n• Root 系统级网络：直接配置系统路由与固定 IP（6.6.6.6），无需系统 VPN 授权，且不占用 Android VPN 槽位（可与其他 VPN 同时运行）。\n• 标准系统 VPN：通过系统 VpnService 运行，受系统同一时间仅能运行一个 VPN 的限制。")
+            .setPositiveButton("Root 系统级网络（推荐）"){_,_->
+                com.zeekr.bridge.NetworkAccessSettings.markRootModeChoiceAsked(this)
+                com.zeekr.bridge.NetworkAccessSettings.rootNetworkEnabled(this,true)
+                com.zeekr.bridge.RootNetworkManager.start(this){_,msg->
+                    runOnUiThread{
+                        toast(msg)
+                        refreshService()
+                        handler.post{continueInitialLaunch()}
+                    }
+                }
+            }
+            .setNegativeButton("标准系统 VPN"){_,_->
+                com.zeekr.bridge.NetworkAccessSettings.markRootModeChoiceAsked(this)
+                com.zeekr.bridge.NetworkAccessSettings.rootNetworkEnabled(this,false)
+                requestVpn(false)
+                handler.post{continueInitialLaunch()}
+            }
+            .setCancelable(false)
+            .show()
+    }
     private fun ensureAutomaticEntry():Boolean {
-        if(!com.zeekr.bridge.NetworkAccessSettings.automatic(this)||!AirPlayPersistence.loadWirelessEnabled(this)||com.zeekr.bridge.BorrowVpnService.accessActive)return false
+        if(!com.zeekr.bridge.NetworkAccessSettings.automatic(this)||!AirPlayPersistence.loadWirelessEnabled(this)||com.zeekr.bridge.BorrowVpnService.accessActive||com.zeekr.bridge.RootNetworkManager.isRunning)return false
+        if(com.zeekr.bridge.RootUtils.isRootAvailable()){
+            if(!com.zeekr.bridge.NetworkAccessSettings.rootModeChoiceAsked(this)){
+                promptRootModeSelection()
+                return true
+            }
+            if(com.zeekr.bridge.NetworkAccessSettings.rootNetworkEnabled(this)){
+                com.zeekr.bridge.RootNetworkManager.start(this){_,_->runOnUiThread{refreshService()}}
+                return false
+            }
+        }
         val cm=getSystemService(android.net.ConnectivityManager::class.java)
         if(cm.allNetworks.any{cm.getNetworkCapabilities(it)?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN)==true})return false
         val consent=android.net.VpnService.prepare(this)
@@ -184,6 +231,15 @@ class DiPlayActivity : AppCompatActivity() {
     }
     private fun requestVpn(borrow:Boolean=false){if(vpnRequestPending||borrow&&!com.krplay.protocol.NetworkFeatures.BORROWING_ENABLED)return
         if(!borrow&&!AirPlayPersistence.loadWirelessEnabled(this)){toast("USB 连接使用独立 VPN；请使用自动查找或切换到系统热点后启用固定入口");return}
+        if(!borrow&&com.zeekr.bridge.RootUtils.isRootAvailable()&&com.zeekr.bridge.NetworkAccessSettings.rootNetworkEnabled(this)){
+            com.zeekr.bridge.RootNetworkManager.start(this){_,msg->
+                runOnUiThread{
+                    toast(msg)
+                    refreshService()
+                }
+            }
+            return
+        }
         requestedBorrow=borrow;val consent=android.net.VpnService.prepare(this)
         if(consent==null)startVpn(borrow)else{vpnRequestPending=true;com.zeekr.bridge.NetworkAccessSettings.markAsked(this);vpnConsent.launch(consent)}
     }

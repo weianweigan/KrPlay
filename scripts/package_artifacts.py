@@ -124,6 +124,8 @@ if release:
 {apk_table}
 
 ## Notes
+- Support Root system-level network configuration and startup mode prompt (no Android VPN slot occupation).
+- Head-unit client adapts to root receivers and displays Android virtual screen entry.
 - High-fidelity audio streaming, adaptive playout queue and jitter reduction.
 - Audio buffer underrun/overrun recovery and sound quality enhancements.
 - Modern dark mode styling and theme support for head-unit client and receiver.

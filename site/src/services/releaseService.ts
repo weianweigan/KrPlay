@@ -5,14 +5,14 @@ export const REPO_NAME = 'KrPlay';
 export const GITHUB_REPO_URL = `https://github.com/${REPO_OWNER}/${REPO_NAME}`;
 export const GITHUB_RELEASES_URL = `${GITHUB_REPO_URL}/releases`;
 
-const FALLBACK_TAG = 'v0.6.0';
+const FALLBACK_TAG = 'v0.6.1';
 
 export const FALLBACK_RELEASE: ReleaseInfo = {
   tag: FALLBACK_TAG,
   name: `KrPlay ${FALLBACK_TAG}`,
-  publishedAt: '2026-10-28',
+  publishedAt: '2026-10-29',
   htmlUrl: `${GITHUB_RELEASES_URL}/tag/${FALLBACK_TAG}`,
-  body: '高保真音频传输与播放队列优化、抖动缓冲自适应与音画同步增强。',
+  body: '支持 Root 设备系统级网络配置与启动模式选择；车机客户端自适应检测 Root 并展示副屏入口。',
   assets: {
     receiverApk: {
       name: `KrPlay-${FALLBACK_TAG}.apk`,

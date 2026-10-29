@@ -27,6 +27,7 @@ class BorrowVpnService:VpnService() {
         val nextBorrowing=com.krplay.protocol.NetworkFeatures.BORROWING_ENABLED && intent?.action!="access"
         if(tun!=null&&borrowing==nextBorrowing)return START_NOT_STICKY
         // Android has one active VPN. Reconfigure this owner without starting a second service.
+        if(RootNetworkManager.isRunning)RootNetworkManager.stop()
         handler.removeCallbacks(monitor);runCatching{TProxyService.TProxyStopService()};runCatching{tun?.close()};tun=null;anchor.close();active=false;accessActive=false
         borrowing=nextBorrowing
         closing=false
@@ -106,11 +107,12 @@ class BorrowVpnService:VpnService() {
     }
     private fun addressPresent()=java.net.NetworkInterface.getNetworkInterfaces()?.toList().orEmpty().any{n->n.inetAddresses.toList().any{it.hostAddress==com.krplay.protocol.Discovery.FIXED_HOST}}
     companion object {
-        @Volatile var accessActive=false;private set
-        @Volatile var accessMessage="固定入口 VPN 未开启";private set
+        @Volatile var accessActive=false;internal set
+        @Volatile var accessMessage="固定入口 VPN 未开启";internal set
+        fun setAccessState(active:Boolean,message:String){accessActive=active;accessMessage=message}
         private const val CHANNEL="krplay-network"
-        @Volatile var active=false;private set
-        @Volatile var message="VPN 未连接";private set
+        @Volatile var active=false;internal set
+        @Volatile var message="VPN 未连接";internal set
         fun stats():LongArray=runCatching{if(active)TProxyService.TProxyGetStats()else LongArray(4)}.getOrDefault(LongArray(4))
     }
 }

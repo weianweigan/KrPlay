@@ -73,10 +73,7 @@ object ZeekrBridgeManager {
     }
     fun clientConnected()=control?.isClosed==false
     fun idleWorkers()=hub.idleWorkers()
-    fun rootScreenAvailable():Boolean {
-        val paths=(System.getenv("PATH")?:"").split(':')+listOf("/system/bin","/system/xbin","/sbin","/debug_ramdisk")
-        return paths.any { java.io.File(it,"su").canExecute() }
-    }
+    fun rootScreenAvailable():Boolean = RootUtils.isRootAvailable()
     fun vpnAuthorized(){pendingVpn=false;error=""}
     fun consumeVpnRequest():Boolean {val pending=pendingVpn;pendingVpn=false;return pending}
     fun publishStatus(){if(!statusPending.compareAndSet(false,true))return;statusExecutor.execute {try{control?.let{sendStatus(it)}}finally{statusPending.set(false)}}}
